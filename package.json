@@ -1,0 +1,68 @@
+{
+  "name": "libralm-reader",
+  "version": "2.0.2",
+  "description": "MCP App for reading EPUBs and PDFs in Claude Desktop",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "libralm-reader": "./bin/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "src"
+  ],
+  "scripts": {
+    "build": "npm run build:server && npm run build:ui",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:ui": "vite build",
+    "dev": "concurrently \"tsc -p tsconfig.server.json --watch\" \"vite build --watch\"",
+    "serve": "tsx src/main.ts",
+    "start": "npm run build && npm run serve",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/libralm-ai/libralm-reader.git"
+  },
+  "keywords": [
+    "mcp",
+    "epub",
+    "pdf",
+    "reader",
+    "claude",
+    "ai"
+  ],
+  "author": "LibraLM",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.24.0",
+    "@types/cors": "^2.8.19",
+    "better-sqlite3": "^11.8.1",
+    "cors": "^2.8.6",
+    "epub2": "^3.0.2",
+    "epubjs": "^0.3.93",
+    "express": "^5.1.0",
+    "pdfjs-dist": "^4.10.38",
+    "react-reader": "^2.0.15",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "concurrently": "^9.1.2",
+    "framer-motion": "^12.29.2",
+    "lucide-react": "^0.563.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-singlefile": "^2.1.0"
+  }
+}

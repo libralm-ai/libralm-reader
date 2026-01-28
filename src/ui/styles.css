@@ -1,0 +1,1652 @@
+/* ============================================================================
+   LibraLM Reader v2 - "Warm Academic" Design System
+   Inspired by Apple Books, rare book libraries, and golden hour light
+
+   IMPORTANT: This CSS avoids 100vh to prevent MCP App sizing loops.
+   Use height: 100% and overflow: hidden on html/body/app.
+   ============================================================================ */
+
+/* --------------------------------------------------------------------------
+   CSS Custom Properties (Design Tokens)
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* Typography */
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Light Theme (Default) - Warm Parchment with Green Accent */
+  --bg-primary: #faf7f2;
+  --bg-secondary: #f5f0e8;
+  --bg-tertiary: #ebe4d8;
+  --bg-hover: rgba(136, 176, 75, 0.1);
+  --bg-active: rgba(136, 176, 75, 0.15);
+
+  --text-primary: #2c2416;
+  --text-secondary: #5c5143;
+  --text-tertiary: #8a7f6d;
+  --text-inverse: #faf7f2;
+
+  --accent-primary: #88B04B;
+  --accent-secondary: #6d9340;
+  --accent-tertiary: #a4c76d;
+  --accent-glow: rgba(136, 176, 75, 0.3);
+
+  /* Keep warm gold for highlights and special elements */
+  --gold-primary: #8b6914;
+  --gold-secondary: #a67c00;
+  --gold-tertiary: #d4a84b;
+
+  --border-subtle: rgba(44, 36, 22, 0.08);
+  --border-default: rgba(44, 36, 22, 0.15);
+  --border-strong: rgba(44, 36, 22, 0.25);
+
+  --shadow-sm: 0 1px 2px rgba(44, 36, 22, 0.05);
+  --shadow-md: 0 4px 12px rgba(44, 36, 22, 0.08);
+  --shadow-lg: 0 8px 32px rgba(44, 36, 22, 0.12);
+  --shadow-xl: 0 16px 48px rgba(44, 36, 22, 0.16);
+  --shadow-book: 0 2px 8px rgba(44, 36, 22, 0.15), 0 8px 24px rgba(44, 36, 22, 0.1);
+
+  /* Highlight Colors */
+  --highlight-yellow: rgba(255, 220, 100, 0.4);
+  --highlight-green: rgba(130, 200, 130, 0.35);
+  --highlight-blue: rgba(130, 180, 220, 0.35);
+  --highlight-pink: rgba(220, 150, 180, 0.35);
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+  --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-book: 2px 8px 8px 2px;
+
+  /* Sizing */
+  --sidebar-width: 260px;
+  --header-height: 64px;
+  --book-card-width: 140px;
+  --book-card-height: 200px;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+  --bg-primary: #1a1814;
+  --bg-secondary: #242018;
+  --bg-tertiary: #2e2820;
+  --bg-hover: rgba(136, 176, 75, 0.15);
+  --bg-active: rgba(136, 176, 75, 0.2);
+
+  --text-primary: #e8e0d4;
+  --text-secondary: #b8ac98;
+  --text-tertiary: #887c68;
+  --text-inverse: #1a1814;
+
+  --accent-primary: #a4c76d;
+  --accent-secondary: #88B04B;
+  --accent-tertiary: #6d9340;
+  --accent-glow: rgba(136, 176, 75, 0.25);
+
+  --gold-primary: #d4a84b;
+  --gold-secondary: #c49a40;
+  --gold-tertiary: #a67c00;
+
+  --border-subtle: rgba(232, 224, 212, 0.06);
+  --border-default: rgba(232, 224, 212, 0.12);
+  --border-strong: rgba(232, 224, 212, 0.2);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.45);
+  --shadow-book: 0 2px 8px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+
+  --highlight-yellow: rgba(255, 220, 100, 0.3);
+  --highlight-green: rgba(130, 200, 130, 0.25);
+  --highlight-blue: rgba(130, 180, 220, 0.25);
+  --highlight-pink: rgba(220, 150, 180, 0.25);
+}
+
+/* Sepia Theme */
+[data-theme="sepia"] {
+  --bg-primary: #f4e8d1;
+  --bg-secondary: #ecdcbe;
+  --bg-tertiary: #e2cfac;
+  --bg-hover: rgba(101, 67, 33, 0.08);
+  --bg-active: rgba(101, 67, 33, 0.12);
+
+  --text-primary: #3d2f1e;
+  --text-secondary: #5c4a34;
+  --text-tertiary: #7d6b52;
+
+  --accent-primary: #7a4f1e;
+  --accent-secondary: #8b5a24;
+  --accent-tertiary: #a67c3d;
+  --accent-glow: rgba(122, 79, 30, 0.2);
+}
+
+/* --------------------------------------------------------------------------
+   Base Styles & Reset - CRITICAL FOR MCP APP SIZING
+   Use height: 100% NOT 100vh to prevent resize loops
+   -------------------------------------------------------------------------- */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   App Container - Fixed size, no growth
+   -------------------------------------------------------------------------- */
+
+.app {
+  height: 100%;
+  width: 100%;
+  min-height: 600px; /* Ensure adequate vertical space for reading */
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle paper texture overlay */
+.app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.015;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+[data-theme="dark"] .app::before {
+  opacity: 0.03;
+}
+
+/* --------------------------------------------------------------------------
+   Library View - Flex layout with contained scrolling
+   -------------------------------------------------------------------------- */
+
+.library {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  min-height: 600px; /* Ensure adequate vertical space */
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-width);
+  height: 100%;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: var(--space-xl) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.sidebar-logo-image {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+}
+
+.sidebar-logo-text {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.sidebar-section {
+  padding: var(--space-lg);
+  flex-shrink: 0;
+}
+
+.sidebar-section-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-md);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--text-secondary);
+  font-size: 0.925rem;
+  font-weight: 450;
+}
+
+.sidebar-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-nav-item.active {
+  background: var(--bg-active);
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.sidebar-nav-item svg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.8;
+}
+
+.sidebar-nav-item.active svg {
+  opacity: 1;
+}
+
+.sidebar-nav-count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+/* Sidebar Toggle Button */
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Collapsed Sidebar */
+.sidebar-collapsed {
+  width: 60px;
+}
+
+.sidebar-collapsed .sidebar-header {
+  padding: var(--space-lg) var(--space-sm);
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.sidebar-collapsed .sidebar-logo {
+  justify-content: center;
+}
+
+.sidebar-collapsed .sidebar-section {
+  padding: var(--space-md) var(--space-sm);
+}
+
+.sidebar-collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: var(--space-sm);
+}
+
+/* Sidebar expand button in header */
+.sidebar-expand-btn {
+  margin-right: var(--space-md);
+}
+
+/* Main Content Area */
+.library-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.library-title {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.library-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Search Container */
+.search-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
+  transition: all var(--transition-fast);
+}
+
+.search-container:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.search-input {
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  width: 200px;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-close {
+  padding: var(--space-xs);
+  min-width: auto;
+}
+
+/* Book Grid - Scrollable area */
+.book-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-xl);
+}
+
+.book-grid-inner {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-xl);
+  max-width: 1400px;
+}
+
+/* --------------------------------------------------------------------------
+   Book Card
+   -------------------------------------------------------------------------- */
+
+.book-card {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform var(--transition-base);
+}
+
+.book-card:hover {
+  transform: translateY(-4px);
+}
+
+.book-card:hover .book-cover {
+  box-shadow: var(--shadow-xl);
+}
+
+.book-cover {
+  width: 100%;
+  aspect-ratio: 2/3;
+  border-radius: var(--radius-book);
+  overflow: hidden;
+  position: relative;
+  box-shadow: var(--shadow-book);
+  transition: box-shadow var(--transition-base);
+}
+
+.book-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Generated cover for books without images */
+.book-cover-generated {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  text-align: center;
+}
+
+.book-cover-generated-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  margin-bottom: var(--space-sm);
+  max-height: 4.8em;
+  overflow: hidden;
+}
+
+.book-cover-generated-author {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.02em;
+}
+
+/* Book cover spine effect */
+.book-cover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 50%, transparent 100%);
+  pointer-events: none;
+}
+
+.book-format-badge {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: var(--radius-sm);
+}
+
+/* Favorite Button on Book Card */
+.book-favorite-btn {
+  position: absolute;
+  bottom: var(--space-sm);
+  right: var(--space-sm);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.book-card:hover .book-favorite-btn {
+  opacity: 1;
+}
+
+.book-favorite-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  transform: scale(1.1);
+}
+
+.book-favorite-btn.is-favorite {
+  opacity: 1;
+  color: #e91e63;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.book-favorite-btn.is-favorite:hover {
+  background: rgba(255, 255, 255, 1);
+  color: #c2185b;
+}
+
+.book-info {
+  padding: var(--space-md) var(--space-xs) 0;
+}
+
+.book-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.book-author {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Reader View - Fixed layout with contained scrolling
+   -------------------------------------------------------------------------- */
+
+.reader {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 600px; /* Ensure adequate vertical space for reading */
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.reader-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-xl);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  height: var(--header-height);
+}
+
+.reader-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.reader-back-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  background: transparent;
+  color: var(--accent-primary);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.reader-back-btn:hover {
+  background: var(--bg-hover);
+}
+
+.reader-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.reader-book-title {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  max-width: 400px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.reader-header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.reader-header-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.reader-header-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.reader-header-btn.is-bookmarked {
+  color: var(--gold-secondary);
+}
+
+.reader-header-btn.is-bookmarked:hover {
+  color: var(--gold-primary);
+}
+
+/* Reader Content - Flex container */
+.reader-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 400px; /* Ensure reading area has adequate height */
+}
+
+/* --------------------------------------------------------------------------
+   Notes Panel (Slide-out)
+   -------------------------------------------------------------------------- */
+
+.notes-panel {
+  width: 320px;
+  height: 100%;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.notes-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.notes-panel-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.notes-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.notes-panel-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Selection Section - Shows when text is selected */
+.selection-section {
+  padding: var(--space-md);
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.selection-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.selection-clear {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.selection-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.selection-text {
+  font-size: 0.875rem;
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--accent-primary);
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.selection-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.selection-colors {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.selection-label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-right: var(--space-xs);
+}
+
+.selection-note-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.notes-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.notes-panel-tab {
+  flex: 1;
+  padding: var(--space-md);
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-bottom: 2px solid transparent;
+}
+
+.notes-panel-tab:hover {
+  color: var(--text-secondary);
+}
+
+.notes-panel-tab.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.notes-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md);
+}
+
+/* Note Form */
+.note-form-input {
+  width: 100%;
+  padding: var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  resize: none;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.note-form-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.note-form-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+/* Annotation Items */
+.annotation-item {
+  padding: var(--space-md);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
+  border-left: 3px solid var(--highlight-yellow);
+}
+
+.annotation-item.highlight-yellow { border-left-color: #f0c800; background: rgba(255, 220, 100, 0.08); }
+.annotation-item.highlight-green { border-left-color: #4caf50; background: rgba(130, 200, 130, 0.08); }
+.annotation-item.highlight-blue { border-left-color: #2196f3; background: rgba(130, 180, 220, 0.08); }
+.annotation-item.highlight-pink { border-left-color: #e91e63; background: rgba(220, 150, 180, 0.08); }
+
+.annotation-text,
+.annotation-quote {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  font-style: italic;
+}
+
+.annotation-note {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-top: var(--space-sm);
+}
+
+.annotation-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-sm);
+}
+
+.annotation-meta {
+  display: flex;
+  gap: var(--space-md);
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.annotation-page {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.annotation-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  opacity: 0;
+}
+
+.annotation-item:hover .annotation-delete {
+  opacity: 1;
+}
+
+.annotation-delete:hover {
+  background: rgba(220, 80, 80, 0.1);
+  color: #dc5050;
+}
+
+/* Clickable annotation items */
+.annotation-item.clickable {
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.annotation-item.clickable:hover {
+  background: var(--bg-hover);
+  transform: translateX(2px);
+}
+
+.annotation-goto {
+  color: var(--accent-primary);
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.annotation-item.clickable:hover .annotation-goto {
+  opacity: 1;
+}
+
+/* Export Section */
+.notes-panel-export {
+  padding: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.export-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-sm);
+}
+
+.export-buttons {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.export-buttons .btn {
+  flex: 1;
+}
+
+/* Toast Notification */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+}
+
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+}
+
+.btn-primary:hover {
+  background: var(--accent-secondary);
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--border-default);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-sm {
+  padding: var(--space-xs) var(--space-md);
+  font-size: 0.8rem;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   Highlight Color Buttons
+   -------------------------------------------------------------------------- */
+
+.highlight-color-btn {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.highlight-color-btn:hover {
+  transform: scale(1.15);
+}
+
+.highlight-color-btn.yellow { background: #f0c800; }
+.highlight-color-btn.green { background: #4caf50; }
+.highlight-color-btn.blue { background: #2196f3; }
+.highlight-color-btn.pink { background: #e91e63; }
+
+/* --------------------------------------------------------------------------
+   Loading & Empty States
+   -------------------------------------------------------------------------- */
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--space-lg);
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--border-default);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--space-3xl);
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  margin-bottom: var(--space-xl);
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.empty-state-text {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------------------------------
+   Highlight Colors in Content
+   -------------------------------------------------------------------------- */
+
+.highlight-yellow { background: var(--highlight-yellow); }
+.highlight-green { background: var(--highlight-green); }
+.highlight-blue { background: var(--highlight-blue); }
+.highlight-pink { background: var(--highlight-pink); }
+
+/* --------------------------------------------------------------------------
+   Animations
+   -------------------------------------------------------------------------- */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-base) ease forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp var(--transition-slow) ease forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn var(--transition-slow) ease forwards;
+}
+
+/* --------------------------------------------------------------------------
+   Scrollbar Styling
+   -------------------------------------------------------------------------- */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* --------------------------------------------------------------------------
+   Selection Styling
+   -------------------------------------------------------------------------- */
+
+::selection {
+  background: var(--accent-glow);
+  color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Adjustments
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .sidebar:not(.sidebar-collapsed) {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-xl);
+  }
+
+  .book-grid-inner {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: var(--space-lg);
+  }
+
+  .chapter-container {
+    padding: var(--space-xl) var(--space-lg);
+  }
+
+  .notes-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-xl);
+  }
+
+  .search-input {
+    width: 150px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Reader Iframe Mode
+   -------------------------------------------------------------------------- */
+
+.reader-content-iframe {
+  position: relative;
+}
+
+.reader-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--bg-primary);
+}
+
+/* React Reader Container */
+.reader-content-epub {
+  position: relative;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.reader-content-epub > div:first-child {
+  flex: 1;
+  height: 100%;
+}
+
+/* Reader Error State */
+.reader-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--space-lg);
+  padding: var(--space-3xl);
+  text-align: center;
+}
+
+.reader-error-icon {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(220, 80, 80, 0.1);
+  color: #dc5050;
+  border-radius: 50%;
+}
+
+.reader-error h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.reader-error p {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  max-width: 400px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ============================================================================
+   PDF Reader Styles
+   ============================================================================ */
+
+.pdf-reader .reader-content {
+  display: flex;
+  height: calc(100% - var(--header-height));
+  overflow: hidden;
+  min-height: 0; /* Allow flex children to shrink for scrolling */
+}
+
+.pdf-viewer-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  min-height: 0; /* Allow flex child to shrink and enable scrolling */
+}
+
+.pdf-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.pdf-nav-btn,
+.pdf-zoom-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.pdf-nav-btn:hover:not(:disabled),
+.pdf-zoom-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.pdf-nav-btn:disabled,
+.pdf-zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pdf-page-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.pdf-page-input {
+  width: 50px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.pdf-page-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.pdf-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-left: var(--space-md);
+  padding-left: var(--space-md);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.pdf-zoom-level {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  min-width: 45px;
+  text-align: center;
+}
+
+.pdf-canvas-wrapper {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* Align to top so scrolling works naturally */
+  padding: var(--space-lg);
+  background: var(--bg-tertiary);
+  min-height: 0; /* Allow flex child to shrink for scrolling */
+}
+
+.pdf-page-container {
+  position: relative;
+  box-shadow: var(--shadow-book);
+  background: white;
+}
+
+.pdf-canvas {
+  display: block;
+}
+
+.pdf-text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  /* Slightly visible for selection feedback - matches example */
+  opacity: 0.2;
+}
+
+.pdf-text-layer span,
+.pdf-text-layer br {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pdf-text-layer > span {
+  pointer-events: all;
+}
+
+.pdf-text-layer ::selection {
+  background: var(--accent-primary);
+}
+
+.pdf-text-layer br {
+  user-select: none;
+}
+
+/* PDF Loading State */
+.pdf-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  color: var(--text-secondary);
+}
+
+.pdf-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-default);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* PDF Error State */
+.pdf-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+  color: #dc5050;
+  font-family: var(--font-body);
+}
+
+/* Selection Actions Popup for PDF - Compact floating toolbar */
+.selection-actions-popup {
+  position: fixed;
+  top: calc(var(--header-height) + var(--space-md) + 48px); /* Below controls bar */
+  right: var(--space-md);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  max-width: 280px;
+}
+
+.selection-preview {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.selection-buttons {
+  display: flex;
+  gap: 2px;
+}
+
+.highlight-btn,
+.note-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.highlight-btn.highlight-yellow {
+  background: var(--highlight-yellow);
+  color: #8b6914;
+}
+
+.highlight-btn.highlight-green {
+  background: var(--highlight-green);
+  color: #3d6d3d;
+}
+
+.highlight-btn.highlight-blue {
+  background: var(--highlight-blue);
+  color: #3d5a6d;
+}
+
+.highlight-btn.highlight-pink {
+  background: var(--highlight-pink);
+  color: #6d3d5a;
+}
+
+.highlight-btn:hover {
+  transform: scale(1.1);
+}
+
+.note-btn {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.note-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
