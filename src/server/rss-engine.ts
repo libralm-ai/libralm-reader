@@ -376,41 +376,6 @@ function cleanHtml(html: string): string {
   return text;
 }
 
-// ============================================================================
-// Context Sync (for Claude integration)
-// ============================================================================
-
-export interface RssReadingContext {
-  articleId: string;
-  feedTitle: string;
-  articleTitle: string;
-  author?: string;
-  pubDate?: string;
-  content: string;
-}
-
-// In-memory variable for current RSS context (same pattern as book context)
-// This works in stdio mode because the MCP server is a single long-running process
-let currentRssContext: RssReadingContext | null = null;
-
-/**
- * Sync the current article context (called by UI on article view)
- * Uses in-memory variable (same pattern as book reading context)
- */
-export function syncRssContext(context: RssReadingContext): void {
-  currentRssContext = { ...context };
-}
-
-/**
- * Get the current RSS context (called by Claude)
- */
-export function getRssContext(): RssReadingContext | null {
-  return currentRssContext;
-}
-
-/**
- * Clear the RSS context
- */
-export function clearRssContext(): void {
-  currentRssContext = null;
-}
+// Note: RSS context is fetched directly from the database using articleId
+// The in-memory sync approach was removed because it wasn't reliable
+// Claude uses get_reading_context(articleId) to fetch article content from SQLite

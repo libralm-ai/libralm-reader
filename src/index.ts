@@ -7,7 +7,7 @@ import { getBookToc, readChapter, getBookIndex, saveBookIndex, readPdfPage, getP
 import {
   subscribeFeedTool, unsubscribeFeedTool, refreshFeedTool, refreshAllFeedsTool,
   listFeedsTool, getFeedArticlesTool, getArticleContentTool, markArticleReadTool,
-  markAllReadTool, saveArticleTool, syncRssContextTool, getRssContextTool,
+  markAllReadTool, saveArticleTool, getRssContextTool,
   searchRssArticlesTool, getSavedArticlesTool, listSubscriptionsTool,
   proxyImageTool,
   SearchRssArticlesSchema
@@ -47,9 +47,9 @@ export function createServer(): McpServer {
     'view_library',
     {
       title: 'View Library',
-      description: `Opens the LibraLM Reader UI showing all books in your library.
+      description: `Opens the LibraLM Reader UI showing your book library and RSS feeds.
 
-IMPORTANT: When the user asks about what they're currently reading, what's on the page, or has questions about their book content, use the get_current_context tool to retrieve the current book title, author, reading position, and the visible page content.`,
+IMPORTANT: When the user asks about what they're currently reading (book or RSS article), use the get_reading_context tool. If the widget context shows an articleId, pass it as a parameter.`,
       inputSchema: {},
       _meta: { ui: { resourceUri } },
     },
@@ -135,37 +135,49 @@ IMPORTANT: When the user asks about what they're currently reading, what's on th
   // UNIFIED tool for getting current reading context (checks both book and RSS)
   // This is the PREFERRED tool - Claude should use this instead of separate tools
   server.registerTool('get_reading_context', {
-    description: `Returns what the user is currently reading - automatically detects if it's a BOOK or RSS article.
+    description: `Returns what the user is currently reading - works for both BOOKS and RSS articles.
 
-IMPORTANT: Use this tool FIRST when the user asks "what am I reading?", "summarize this", or any question about current content. This tool automatically checks both book and RSS contexts.
+**CRITICAL: RETRIEVE WIDGET CONTEXT FIRST before calling this tool!**
+If the user is reading an RSS article, the widget context will contain an articleId that you MUST pass to this tool.
 
-Returns whichever content the user is currently viewing:
-- If reading a BOOK: title, author, position, and visible text
-- If reading an RSS ARTICLE: feed, article title, author, date, and full content
-- If nothing is open: indicates user should open content first
+Parameters:
+- articleId (REQUIRED for RSS): The article ID from widget context. Look for "articleId=" in the widget context.
 
-ALWAYS call this tool before answering questions about what the user is reading.`,
-    inputSchema: z.object({}),
-  }, async () => {
-    // First check RSS context (more specific - user had to navigate to RSS)
-    const rssResult = getRssContextTool();
-    const rssContent = rssResult.content[0];
-    if (rssContent && rssContent.type === 'text' && !rssContent.text.includes('No RSS article is currently being read')) {
+How to use:
+1. First, retrieve widget context for libralm-reader
+2. Look for "articleId=" in the context
+3. If found: call get_reading_context(articleId="the-id-from-context")
+4. If not found: call get_reading_context() for book context
+
+Returns:
+- For RSS: feed name, article title, author, date, and full content
+- For books: title, author, position, and visible text`,
+    inputSchema: z.object({
+      articleId: z.string().optional().describe('REQUIRED for RSS articles - get this from widget context'),
+    }),
+  }, async (args: { articleId?: string }) => {
+    // If articleId provided, fetch RSS article directly from database
+    if (args.articleId) {
+      const rssResult = getRssContextTool(args.articleId);
       return rssResult;
     }
 
-    // Fall back to book context
+    // No articleId - check book context
     const bookResult = await getCurrentContext();
     const bookContent = bookResult.content[0];
     if (bookContent && bookContent.type === 'text' && !bookContent.text.includes('No book is currently being read')) {
       return bookResult;
     }
 
-    // Nothing is being read
+    // Nothing found - instruct to check widget context
     return {
       content: [{
         type: 'text' as const,
-        text: 'The user is not currently reading anything. They may be viewing the library or feed list. Ask them to open a book or article first.',
+        text: `No book is currently being read.
+
+**If the user is reading an RSS article:** You need to retrieve the widget context first! The articleId is in the widget context. Call this tool again with the articleId parameter.
+
+**If the user is viewing the library:** They haven't opened anything yet.`,
       }],
     };
   });
@@ -757,28 +769,6 @@ Returns:
     },
     async (args: { articleId: string }) => {
       return saveArticleTool(args);
-    }
-  );
-
-  // App-only: Sync RSS reading context
-  registerAppTool(
-    server,
-    'sync_rss_context',
-    {
-      title: 'Sync RSS Context',
-      description: 'Sync the current RSS article context from the UI.',
-      inputSchema: {
-        articleId: z.string().describe('Article ID'),
-        feedTitle: z.string().describe('Feed title'),
-        articleTitle: z.string().describe('Article title'),
-        author: z.string().optional().describe('Article author'),
-        pubDate: z.string().optional().describe('Publication date'),
-        content: z.string().describe('Article content (visible text)'),
-      },
-      _meta: { ui: { resourceUri, visibility: ['app'] } },
-    },
-    async (args: { articleId: string; feedTitle: string; articleTitle: string; author?: string; pubDate?: string; content: string }) => {
-      return syncRssContextTool(args);
     }
   );
 

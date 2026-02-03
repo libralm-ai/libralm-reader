@@ -16,8 +16,6 @@ import {
   toggleSaved,
   searchArticles,
   getArticleAsMarkdown,
-  syncRssContext,
-  getRssContext,
 } from '../rss-engine.js';
 import { getStorage } from '../../storage/index.js';
 
@@ -60,15 +58,6 @@ export const MarkAllReadSchema = z.object({
 
 export const SaveArticleSchema = z.object({
   articleId: z.string().describe('Article ID to toggle saved state'),
-});
-
-export const SyncRssContextSchema = z.object({
-  articleId: z.string().describe('Article ID'),
-  feedTitle: z.string().describe('Feed title'),
-  articleTitle: z.string().describe('Article title'),
-  author: z.string().optional().describe('Article author'),
-  pubDate: z.string().optional().describe('Publication date'),
-  content: z.string().describe('Article content (visible text)'),
 });
 
 export const SearchRssArticlesSchema = z.object({
@@ -348,76 +337,49 @@ export function saveArticleTool(args: z.infer<typeof SaveArticleSchema>) {
   };
 }
 
-/**
- * Sync current RSS reading context (called by UI on article view)
- */
-export function syncRssContextTool(args: z.infer<typeof SyncRssContextSchema>) {
-  syncRssContext({
-    articleId: args.articleId,
-    feedTitle: args.feedTitle,
-    articleTitle: args.articleTitle,
-    author: args.author,
-    pubDate: args.pubDate,
-    content: args.content,
-  });
-
-  return {
-    content: [{ type: 'text' as const, text: 'RSS context synced.' }],
-    structuredContent: { synced: true },
-  };
-}
-
 // ============================================================================
 // Model-Only Tool Implementations
 // ============================================================================
 
 /**
- * Get current RSS reading context (for Claude to understand what user is reading)
- * If articleId is provided, fetches directly from database (bypasses sync mechanism)
+ * Get RSS article content by ID (fetches from database)
+ * Called by Claude when user is reading an RSS article
  */
 export function getRssContextTool(articleId?: string) {
-  // If articleId provided, fetch directly from database
-  if (articleId) {
-    const article = getArticle(articleId);
-    if (article) {
-      // Get the feed title
-      const storage = getStorage();
-      const feed = storage.getFeed(article.feedId);
-      const feedTitle = feed?.title || 'Unknown Feed';
-
-      let text = `The user is reading an RSS article:\n\n`;
-      text += `**Feed:** ${feedTitle}\n`;
-      text += `**Article:** ${article.title}\n`;
-      if (article.author) text += `**Author:** ${article.author}\n`;
-      if (article.pubDate) text += `**Published:** ${article.pubDate}\n`;
-      text += `\n---\n\n${article.content || article.summary || 'No content available.'}`;
-
-      return {
-        content: [{ type: 'text' as const, text }],
-      };
-    }
-  }
-
-  // Fall back to in-memory context
-  const context = getRssContext();
-
-  if (!context) {
+  if (!articleId) {
     return {
       content: [
         {
           type: 'text' as const,
-          text: 'No RSS article is currently being read. The user may be viewing the feed list or library.',
+          text: 'No articleId provided. Check the widget context for an article ID.',
         },
       ],
     };
   }
 
+  const article = getArticle(articleId);
+  if (!article) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Article not found with ID: ${articleId}`,
+        },
+      ],
+    };
+  }
+
+  // Get the feed title
+  const storage = getStorage();
+  const feed = storage.getFeed(article.feedId);
+  const feedTitle = feed?.title || 'Unknown Feed';
+
   let text = `The user is reading an RSS article:\n\n`;
-  text += `**Feed:** ${context.feedTitle}\n`;
-  text += `**Article:** ${context.articleTitle}\n`;
-  if (context.author) text += `**Author:** ${context.author}\n`;
-  if (context.pubDate) text += `**Published:** ${context.pubDate}\n`;
-  text += `\n---\n\n${context.content}`;
+  text += `**Feed:** ${feedTitle}\n`;
+  text += `**Article:** ${article.title}\n`;
+  if (article.author) text += `**Author:** ${article.author}\n`;
+  if (article.pubDate) text += `**Published:** ${article.pubDate}\n`;
+  text += `\n---\n\n${article.content || article.summary || 'No content available.'}`;
 
   return {
     content: [{ type: 'text' as const, text }],

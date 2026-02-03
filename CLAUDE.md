@@ -55,7 +55,7 @@ Claude Desktop → MCP App iframe → HTTP Server (port 3001) → File System (b
 
 Tools have different visibility for app vs model:
 - **App-only**: `load_book`, `get_epub_data`, `get_pdf_data`, `sync_reading_context`, annotation tools, RSS UI tools (`subscribe_feed`, `unsubscribe_feed`, `refresh_feed`, `get_feed_articles`, etc.)
-- **Model-only**: `get_current_context`, `search_highlights`, `search_notes`, `get_book_toc`, `read_chapter`, `get_pdf_toc`, `read_pdf_page`, `get_book_index`, `save_book_index`, RSS query tools (`get_rss_context`, `list_subscriptions`, `search_rss_articles`, `get_saved_articles`)
+- **Model-only**: `get_reading_context` (unified), `get_current_context` (books), `search_highlights`, `search_notes`, `get_book_toc`, `read_chapter`, `get_pdf_toc`, `read_pdf_page`, RSS query tools (`get_rss_context`, `list_subscriptions`, `search_rss_articles`, `get_saved_articles`)
 - **Both**: `view_library`
 
 ## Critical Technical Patterns
@@ -63,16 +63,21 @@ Tools have different visibility for app vs model:
 ### CSP Workaround for EPUB/PDF Loading
 Claude Desktop blocks blob URLs. Solution: Server sends files as base64 → Client converts to ArrayBuffer → Pass to react-reader (EPUB) or PDF.js (PDF).
 
-### Reading Context Sync (Token Limit Workaround)
+### Unified Reading Context Tool
+`get_reading_context` is the preferred tool for getting what the user is reading:
+- For books: checks in-memory sync (set by `sync_reading_context` on page turns)
+- For RSS: requires `articleId` parameter (passed via widget context from `updateModelContext`)
+
+### Book Context Sync (Token Limit Workaround)
 `updateModelContext()` has ~4000 token limit. Solution: Two-tool pattern:
 1. `sync_reading_context` (app-only) - UI calls on every page turn, stores on server
-2. `get_current_context` (model-only) - Claude calls when user asks about book
+2. `get_reading_context` (model-only) - Claude calls when user asks about book
 
-### RSS Context Sync
-Similar pattern for RSS articles:
+### RSS Context (Database Fetch)
+RSS articles are fetched directly from SQLite database:
 1. UI calls `updateModelContext()` with article ID when user opens an article
-2. `get_rss_context` (model-only) - Claude calls with articleId to fetch content directly from SQLite
-3. Use `--- RSS MODE ---` header in model context to guide Claude to use RSS tools instead of book tools
+2. Claude sees articleId in widget context and passes it to `get_reading_context(articleId="...")`
+3. Tool fetches article content directly from database (no in-memory sync needed)
 
 ### Visible Text Detection
 epub.js uses CSS columns for pagination. Use CFI range from `relocated` event, not viewport checks.
@@ -98,4 +103,4 @@ Store CFI range (EPUB) or page number (PDF) when creating highlights. For EPUBs,
 6. PDF.js warnings break stdio mode - use bootstrap pattern (bin/cli.js)
 7. Use `pdfjs-dist/legacy/build/pdf.mjs` for Node.js compatibility
 8. RSS images require server-side proxy (`/proxy-image` endpoint) to bypass CSP restrictions
-9. Pass article ID through `updateModelContext()` so `get_rss_context` can fetch directly from DB
+9. Pass article ID through `updateModelContext()` so `get_reading_context(articleId)` can fetch from DB

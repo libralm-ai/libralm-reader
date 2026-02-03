@@ -1,6 +1,6 @@
 {
   "name": "libralm-reader",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "MCP App for reading EPUBs, PDFs, and RSS feeds in Claude Desktop",
   "type": "module",
   "main": "dist/index.js",

@@ -884,22 +884,7 @@ const ArticleView: React.FC<{
           onMarkRead(true);
         }
 
-        // Sync context to server
-        app.callServerTool({
-          name: 'sync_rss_context',
-          arguments: {
-            articleId: article.id,
-            feedTitle,
-            articleTitle: article.title,
-            author: article.author,
-            pubDate: article.pubDate,
-            content: content,
-          },
-        }).catch((err) => {
-          console.warn('[LibraLM-RSS] Failed to sync context:', err);
-        });
-
-        // Update model context
+        // Update model context (articleId is used by Claude to fetch from database)
         app.updateModelContext({
           content: [{
             type: 'text',
@@ -908,9 +893,8 @@ LibraLM RSS Reader | Reading: "${article.title}" from ${feedTitle}
 ${article.author ? `By ${article.author}` : ''}${article.pubDate ? ` | ${new Date(article.pubDate).toLocaleDateString()}` : ''}
 Article ID: ${article.id}
 
-IMPORTANT: User is reading an RSS ARTICLE, not a book.
-- To get article content: use get_rss_context with articleId="${article.id}"
-- get_current_context is for BOOKS only and will say "no book is being read"`,
+IMPORTANT: User is reading an RSS ARTICLE.
+To get article content, use: get_reading_context with articleId="${article.id}"`,
           }],
         }).catch((err) => {
           console.warn('[LibraLM-RSS] Failed to update model context:', err);
@@ -1568,7 +1552,7 @@ const PDFReaderView: React.FC<{
           app.updateModelContext({
             content: [{
               type: 'text',
-              text: `LibraLM Reader | "${currentBook.title}" by ${currentBook.author}\nPage ${currentPage} of ${totalPages}\n\n[Use get_current_context tool to see the visible page content]`,
+              text: `LibraLM Reader | "${currentBook.title}" by ${currentBook.author}\nPage ${currentPage} of ${totalPages}\n\n[Use get_reading_context tool to see the visible page content]`,
             }],
           });
         }
@@ -2016,7 +2000,7 @@ const ReaderView: React.FC<{
           text: `LibraLM Reader | "${currentBook.title}" by ${currentBook.author}
 ${locationInfo}
 
-[Use get_current_context tool to see the visible page content]`,
+[Use get_reading_context tool to see the visible page content]`,
         }],
       });
     };
@@ -2361,10 +2345,10 @@ function LibraLMReaderApp() {
           text: `--- RSS MODE ---
 LibraLM RSS Reader | ${feeds.length} feeds, ${totalUnread} unread, ${savedCount} saved
 
-User is browsing RSS feeds (not reading books).
+User is browsing RSS feeds (not reading a book or article yet).
 - To list feeds: use list_subscriptions
-- When user opens an article and asks about it: use get_rss_context (NOT get_current_context)
-- To search articles: use search_rss_articles`,
+- To search articles: use search_rss_articles
+- When user opens an article: articleId will be provided for get_reading_context`,
         }],
       }).catch(console.warn);
     } catch (err) {
@@ -2413,10 +2397,10 @@ User is browsing RSS feeds (not reading books).
           text: `--- RSS MODE ---
 LibraLM RSS Reader | ${prev.feeds.length} feeds, ${totalUnread} unread, ${savedCount} saved
 
-User is browsing RSS feeds (not reading books).
+User is browsing RSS feeds (not reading a book or article yet).
 - To list feeds: use list_subscriptions
-- When user opens an article and asks about it: use get_rss_context (NOT get_current_context)
-- To search articles: use search_rss_articles`,
+- To search articles: use search_rss_articles
+- When user opens an article: articleId will be provided for get_reading_context`,
         }],
       }).catch(console.warn);
 
