@@ -66,6 +66,63 @@ async function startStreamableHTTPServer(): Promise<void> {
   // Get the book path
   const bookPath = process.env.BOOK_PATH || path.join(os.homedir(), 'Books');
 
+  // Proxy external images to bypass CSP restrictions
+  // Images are fetched server-side and returned as base64 data URLs
+  app.get('/proxy-image', async (req: Request, res: Response) => {
+    const imageUrl = req.query.url as string;
+
+    if (!imageUrl) {
+      res.status(400).json({ error: 'Missing url parameter' });
+      return;
+    }
+
+    try {
+      // Decode the URL
+      const decodedUrl = decodeURIComponent(imageUrl);
+
+      // Validate it's a proper URL
+      const parsedUrl = new URL(decodedUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        res.status(400).json({ error: 'Invalid URL protocol' });
+        return;
+      }
+
+      // Fetch the image
+      const response = await fetch(decodedUrl, {
+        headers: {
+          'User-Agent': 'LibraLM-Reader/2.0 (RSS Image Proxy)',
+          'Accept': 'image/*',
+        },
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      });
+
+      if (!response.ok) {
+        res.status(response.status).json({ error: `Failed to fetch image: ${response.statusText}` });
+        return;
+      }
+
+      const contentType = response.headers.get('content-type') || 'image/png';
+
+      // Check if it's actually an image
+      if (!contentType.startsWith('image/')) {
+        res.status(400).json({ error: 'URL does not point to an image' });
+        return;
+      }
+
+      // Get the image data and forward it
+      const buffer = await response.arrayBuffer();
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+      res.send(Buffer.from(buffer));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Image proxy error:', message);
+      res.status(500).json({ error: `Failed to proxy image: ${message}` });
+    }
+  });
+
   // Serve EPUB files by absolute path (URL-encoded)
   app.get('/epub', (req: Request, res: Response) => {
     const filePath = req.query.path as string;
@@ -107,9 +164,17 @@ async function startStreamableHTTPServer(): Promise<void> {
     console.log(`Data path: ${process.env.DATA_PATH || '~/.libralm'}`);
   });
 
+  let isShuttingDown = false;
   const shutdown = () => {
+    if (isShuttingDown) {
+      console.log('Force exit...');
+      process.exit(1);
+    }
+    isShuttingDown = true;
     console.log('\nShutting down...');
     httpServer.close(() => process.exit(0));
+    // Force exit after 3 seconds if server doesn't close
+    setTimeout(() => process.exit(0), 3000);
   };
 
   process.on('SIGINT', shutdown);

@@ -1,6 +1,6 @@
 # LibraLM Reader
 
-An **MCP App** for reading EPUBs and PDFs directly inside Claude Desktop. Point it to your books folder and enjoy a beautiful reading experience with AI-powered assistance.
+An **MCP App** for reading EPUBs, PDFs, and RSS feeds directly inside Claude Desktop. Point it to your books folder, subscribe to your favorite feeds, and enjoy a beautiful reading experience with AI-powered assistance.
 
 [![npm](https://img.shields.io/npm/v/libralm-reader)](https://www.npmjs.com/package/libralm-reader) ![MCP App](https://img.shields.io/badge/MCP-App-blue) ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
@@ -10,6 +10,7 @@ An **MCP App** for reading EPUBs and PDFs directly inside Claude Desktop. Point 
 
 - **Library View** - Browse your book collection with cover images in a clean grid
 - **EPUB & PDF Support** - Read both formats with full navigation
+- **RSS Reader** - Subscribe to RSS/Atom feeds and read articles without leaving Claude
 - **Highlights & Notes** - Annotate as you read, with color-coded highlights
 - **Reading Position** - Automatically remembers where you left off
 - **Claude Integration** - Ask Claude about what you're reading: summaries, explanations, questions
@@ -25,6 +26,11 @@ An **MCP App** for reading EPUBs and PDFs directly inside Claude Desktop. Point 
 |:---:|:---:|:---:|
 | ![Notes](images/save-notes.png) | ![Export](images/markdown_save.png) | ![Research](images/research.png) |
 | Add notes to any passage | Export your annotations | Ask Claude questions across your entire library |
+
+| RSS Feed List | RSS Article Reading |
+|:---:|:---:|
+| ![RSS Feeds](images/rss_feed.png) | ![RSS Article](images/rss_page.png) |
+| Subscribe and browse your favorite feeds | Read articles with Claude assistance |
 
 ### See It In Action
 
@@ -102,6 +108,13 @@ Once you have LibraLM Reader installed, try these prompts with Claude:
 - "Generate discussion questions for my book club"
 - "Create flashcards from my highlights"
 
+### RSS Feeds
+- "Show me my RSS feeds"
+- "Subscribe to https://example.com/feed.xml"
+- "What's new in my feeds?"
+- "Summarize this article"
+- "Search my feeds for articles about [topic]"
+
 ## Configuration
 
 | Environment Variable | Default | Description |
@@ -132,12 +145,23 @@ Claude Desktop
 
 ## MCP Tools
 
+### Book Tools
+
 | Tool | Description |
 |------|-------------|
 | `view_library` | Opens the library UI |
 | `get_current_context` | Gets current reading position and visible text |
 | `search_highlights` | Searches through your highlights |
 | `search_notes` | Searches through your notes |
+
+### RSS Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_subscriptions` | Lists all subscribed RSS feeds |
+| `get_rss_context` | Gets the article currently being read |
+| `search_rss_articles` | Searches across all RSS articles |
+| `get_saved_articles` | Gets starred/saved articles |
 
 ## Data Storage
 
@@ -225,3 +249,5 @@ Built with:
 - [react-reader](https://github.com/gerhardsletten/react-reader) - EPUB rendering (epub.js wrapper)
 - [PDF.js](https://mozilla.github.io/pdf.js/) - PDF rendering
 - [epub2](https://github.com/nickvdh/epub2) - EPUB parsing
+- [rss-parser](https://github.com/rbren/rss-parser) - RSS/Atom feed parsing
+- [Turndown](https://github.com/mixmark-io/turndown) - HTML to Markdown conversion

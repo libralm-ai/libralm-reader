@@ -9,7 +9,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   BookOpen, Library as LibraryIcon, FileText, Star, ChevronLeft,
   Menu, X, BookMarked, StickyNote, Search, Trash2, Highlighter, Heart,
-  ChevronRight, ZoomIn, ZoomOut
+  ChevronRight, ZoomIn, ZoomOut, Rss, RefreshCw, Plus, ExternalLink,
+  Check, Circle
 } from 'lucide-react';
 import { StrictMode, useCallback, useEffect, useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -77,8 +78,32 @@ interface Bookmark {
   createdAt: string;
 }
 
+// RSS Types
+interface RssFeed {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  iconUrl?: string;
+  unreadCount: number;
+  lastFetched?: string;
+}
+
+interface RssArticle {
+  id: string;
+  feedId: string;
+  title: string;
+  author?: string;
+  pubDate?: string;
+  summary?: string;
+  content?: string;
+  link?: string;
+  isRead: boolean;
+  isSaved: boolean;
+}
+
 interface AppState {
-  view: 'loading' | 'library' | 'reader';
+  view: 'loading' | 'library' | 'reader' | 'feeds' | 'article';
   books: Book[];
   currentBook: BookDetails | null;
   highlights: Highlight[];
@@ -87,6 +112,12 @@ interface AppState {
   filter: 'all' | 'epub' | 'pdf' | 'favorites';
   showNotes: boolean;
   notesTab: 'highlights' | 'notes' | 'bookmarks';
+  // RSS state
+  feeds: RssFeed[];
+  currentFeed: RssFeed | null;
+  articles: RssArticle[];
+  currentArticle: RssArticle | null;
+  rssFilter: 'all' | 'unread' | 'saved';
 }
 
 // ============================================================================
@@ -171,7 +202,9 @@ const Sidebar: React.FC<{
   onFilterChange: (filter: AppState['filter']) => void;
   isCollapsed: boolean;
   onToggle: () => void;
-}> = ({ filter, books, favorites, onFilterChange, isCollapsed, onToggle }) => {
+  onOpenFeeds?: () => void;
+  feedsUnreadCount?: number;
+}> = ({ filter, books, favorites, onFilterChange, isCollapsed, onToggle, onOpenFeeds, feedsUnreadCount = 0 }) => {
   const epubCount = books.filter(b => b.format === 'epub').length;
   const pdfCount = books.filter(b => b.format === 'pdf').length;
   const favoritesCount = favorites.size;
@@ -253,6 +286,29 @@ const Sidebar: React.FC<{
           </div>
         </nav>
       </div>
+
+      {onOpenFeeds && (
+        <div className="sidebar-section">
+          {!isCollapsed && <div className="sidebar-section-title">Reading</div>}
+          <nav className="sidebar-nav">
+            <div
+              className="sidebar-nav-item"
+              onClick={onOpenFeeds}
+              title="RSS Feeds"
+            >
+              <Rss size={18} />
+              {!isCollapsed && (
+                <>
+                  <span>RSS Feeds</span>
+                  {feedsUnreadCount > 0 && (
+                    <span className="sidebar-nav-count">{feedsUnreadCount}</span>
+                  )}
+                </>
+              )}
+            </div>
+          </nav>
+        </div>
+      )}
     </aside>
   );
 };
@@ -266,7 +322,9 @@ const LibraryView: React.FC<{
   onToggleFavorite: (bookId: string) => void;
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
-}> = ({ state, app, favorites, onFilterChange, onOpenBook, onToggleFavorite, sidebarCollapsed, onToggleSidebar }) => {
+  onOpenFeeds?: () => void;
+  feedsUnreadCount?: number;
+}> = ({ state, app, favorites, onFilterChange, onOpenBook, onToggleFavorite, sidebarCollapsed, onToggleSidebar, onOpenFeeds, feedsUnreadCount }) => {
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -332,6 +390,8 @@ const LibraryView: React.FC<{
         onFilterChange={onFilterChange}
         isCollapsed={sidebarCollapsed}
         onToggle={onToggleSidebar}
+        onOpenFeeds={onOpenFeeds}
+        feedsUnreadCount={feedsUnreadCount}
       />
       <main className="library-main">
         <header className="library-header">
@@ -406,6 +466,543 @@ const LibraryView: React.FC<{
           )}
         </div>
       </main>
+    </div>
+  );
+};
+
+// ============================================================================
+// RSS Components
+// ============================================================================
+
+const FeedCard: React.FC<{
+  feed: RssFeed;
+  isSelected: boolean;
+  onClick: () => void;
+  onRefresh: (e: React.MouseEvent) => void;
+  onUnsubscribe: (e: React.MouseEvent) => void;
+}> = ({ feed, isSelected, onClick, onRefresh, onUnsubscribe }) => (
+  <div
+    className={`feed-card ${isSelected ? 'selected' : ''}`}
+    onClick={onClick}
+  >
+    <div className="feed-card-icon">
+      {feed.iconUrl ? (
+        <img src={feed.iconUrl} alt="" className="feed-icon-img" />
+      ) : (
+        <Rss size={20} />
+      )}
+    </div>
+    <div className="feed-card-info">
+      <div className="feed-card-title">{feed.title}</div>
+      {feed.description && (
+        <div className="feed-card-description">{feed.description.slice(0, 80)}</div>
+      )}
+    </div>
+    {feed.unreadCount > 0 && (
+      <span className="feed-unread-badge">{feed.unreadCount}</span>
+    )}
+    <div className="feed-card-actions">
+      <button className="feed-action-btn" onClick={onRefresh} title="Refresh feed">
+        <RefreshCw size={14} />
+      </button>
+      <button className="feed-action-btn danger" onClick={onUnsubscribe} title="Unsubscribe">
+        <Trash2 size={14} />
+      </button>
+    </div>
+  </div>
+);
+
+const ArticleCard: React.FC<{
+  article: RssArticle;
+  feedTitle: string;
+  onClick: () => void;
+  onToggleSaved: (e: React.MouseEvent) => void;
+}> = ({ article, feedTitle, onClick, onToggleSaved }) => (
+  <div
+    className={`article-card ${article.isRead ? 'is-read' : ''}`}
+    onClick={onClick}
+  >
+    <div className="article-card-indicator">
+      {article.isRead ? <Check size={14} /> : <Circle size={14} />}
+    </div>
+    <div className="article-card-content">
+      <div className="article-card-title">{article.title}</div>
+      <div className="article-card-meta">
+        {article.author && <span className="article-author">{article.author}</span>}
+        {article.pubDate && (
+          <span className="article-date">
+            {new Date(article.pubDate).toLocaleDateString()}
+          </span>
+        )}
+        <span className="article-feed">{feedTitle}</span>
+      </div>
+      {article.summary && (
+        <div className="article-card-summary">
+          {article.summary.slice(0, 150)}...
+        </div>
+      )}
+    </div>
+    <button
+      className={`article-save-btn ${article.isSaved ? 'is-saved' : ''}`}
+      onClick={onToggleSaved}
+      title={article.isSaved ? 'Unsave' : 'Save'}
+    >
+      <Star size={16} fill={article.isSaved ? 'currentColor' : 'none'} />
+    </button>
+  </div>
+);
+
+const FeedsView: React.FC<{
+  state: AppState;
+  app: App | null;
+  onSelectFeed: (feed: RssFeed | null) => void;
+  onOpenArticle: (article: RssArticle) => void;
+  onRefreshFeed: (feedId: string) => void;
+  onRefreshAll: () => void;
+  onUnsubscribe: (feedId: string) => void;
+  onSubscribe: (url: string) => void;
+  onToggleSaved: (articleId: string) => void;
+  onFilterChange: (filter: 'all' | 'unread' | 'saved') => void;
+  onBackToLibrary: () => void;
+}> = ({
+  state, app, onSelectFeed, onOpenArticle, onRefreshFeed, onRefreshAll,
+  onUnsubscribe, onSubscribe, onToggleSaved, onFilterChange, onBackToLibrary
+}) => {
+  const [showAddFeed, setShowAddFeed] = useState(false);
+  const [feedUrl, setFeedUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const feedUrlInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showAddFeed && feedUrlInputRef.current) {
+      feedUrlInputRef.current.focus();
+    }
+  }, [showAddFeed]);
+
+  const handleSubscribe = async () => {
+    if (!feedUrl.trim()) return;
+    setIsLoading(true);
+    await onSubscribe(feedUrl.trim());
+    setFeedUrl('');
+    setShowAddFeed(false);
+    setIsLoading(false);
+  };
+
+  const totalUnread = state.feeds.reduce((sum, f) => sum + f.unreadCount, 0);
+  const feedMap = new Map(state.feeds.map(f => [f.id, f]));
+
+  // Filter articles
+  const filteredArticles = state.articles.filter(article => {
+    if (state.currentFeed && article.feedId !== state.currentFeed.id) return false;
+    if (state.rssFilter === 'unread' && article.isRead) return false;
+    if (state.rssFilter === 'saved' && !article.isSaved) return false;
+    return true;
+  });
+
+  return (
+    <div className="feeds-view">
+      <aside className="feeds-sidebar">
+        <div className="feeds-sidebar-header">
+          <button className="btn btn-ghost" onClick={onBackToLibrary} title="Back to Library">
+            <ChevronLeft size={18} />
+          </button>
+          <h2 className="feeds-sidebar-title">RSS Feeds</h2>
+          <button className="btn btn-ghost" onClick={onRefreshAll} title="Refresh all feeds">
+            <RefreshCw size={18} />
+          </button>
+        </div>
+
+        <div className="feeds-filter-bar">
+          <button
+            className={`feeds-filter-btn ${state.rssFilter === 'all' ? 'active' : ''}`}
+            onClick={() => onFilterChange('all')}
+          >
+            All
+          </button>
+          <button
+            className={`feeds-filter-btn ${state.rssFilter === 'unread' ? 'active' : ''}`}
+            onClick={() => onFilterChange('unread')}
+          >
+            Unread ({totalUnread})
+          </button>
+          <button
+            className={`feeds-filter-btn ${state.rssFilter === 'saved' ? 'active' : ''}`}
+            onClick={() => onFilterChange('saved')}
+          >
+            Saved
+          </button>
+        </div>
+
+        <div className="feeds-list">
+          <div
+            className={`feed-card ${!state.currentFeed ? 'selected' : ''}`}
+            onClick={() => onSelectFeed(null)}
+          >
+            <div className="feed-card-icon">
+              <Rss size={20} />
+            </div>
+            <div className="feed-card-info">
+              <div className="feed-card-title">All Feeds</div>
+            </div>
+            {totalUnread > 0 && (
+              <span className="feed-unread-badge">{totalUnread}</span>
+            )}
+          </div>
+
+          {state.feeds.map((feed) => (
+            <FeedCard
+              key={feed.id}
+              feed={feed}
+              isSelected={state.currentFeed?.id === feed.id}
+              onClick={() => onSelectFeed(feed)}
+              onRefresh={(e) => {
+                e.stopPropagation();
+                onRefreshFeed(feed.id);
+              }}
+              onUnsubscribe={(e) => {
+                e.stopPropagation();
+                onUnsubscribe(feed.id);
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="feeds-add-section">
+          {showAddFeed ? (
+            <div className="feed-add-form">
+              <input
+                ref={feedUrlInputRef}
+                type="url"
+                className="feed-url-input"
+                placeholder="https://example.com/feed.xml"
+                value={feedUrl}
+                onChange={(e) => setFeedUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSubscribe();
+                  if (e.key === 'Escape') setShowAddFeed(false);
+                }}
+                disabled={isLoading}
+              />
+              <div className="feed-add-actions">
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleSubscribe}
+                  disabled={isLoading || !feedUrl.trim()}
+                >
+                  {isLoading ? 'Adding...' : 'Add'}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowAddFeed(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="btn btn-primary feeds-add-btn"
+              onClick={() => setShowAddFeed(true)}
+            >
+              <Plus size={16} />
+              Add Feed
+            </button>
+          )}
+        </div>
+      </aside>
+
+      <main className="feeds-main">
+        <header className="feeds-header">
+          <h1 className="feeds-title">
+            {state.currentFeed ? state.currentFeed.title : 'All Articles'}
+          </h1>
+          <span className="feeds-count">
+            {filteredArticles.length} articles
+          </span>
+        </header>
+
+        <div className="articles-list">
+          {filteredArticles.length > 0 ? (
+            filteredArticles.map((article) => (
+              <ArticleCard
+                key={article.id}
+                article={article}
+                feedTitle={feedMap.get(article.feedId)?.title || ''}
+                onClick={() => onOpenArticle(article)}
+                onToggleSaved={(e) => {
+                  e.stopPropagation();
+                  onToggleSaved(article.id);
+                }}
+              />
+            ))
+          ) : (
+            <div className="empty-state">
+              <Rss className="empty-state-icon" />
+              <h2 className="empty-state-title">
+                {state.feeds.length === 0 ? 'No feeds yet' : 'No articles'}
+              </h2>
+              <p className="empty-state-text">
+                {state.feeds.length === 0
+                  ? 'Subscribe to RSS feeds to see articles here.'
+                  : state.rssFilter === 'unread'
+                    ? 'All caught up!'
+                    : 'No articles match your filter.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+// Sanitize HTML content from RSS feeds
+function sanitizeHtml(html: string): string {
+  if (!html) return '<p>No content available.</p>';
+
+  // Create a temporary element to parse HTML
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+
+  // Remove potentially dangerous elements
+  const dangerousTags = ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input'];
+  dangerousTags.forEach(tag => {
+    const elements = temp.querySelectorAll(tag);
+    elements.forEach(el => el.remove());
+  });
+
+  // Remove event handlers and dangerous attributes
+  const allElements = temp.querySelectorAll('*');
+  allElements.forEach(el => {
+    // Remove event handlers
+    const attrs = [...el.attributes];
+    attrs.forEach(attr => {
+      if (attr.name.startsWith('on') || attr.name === 'srcdoc') {
+        el.removeAttribute(attr.name);
+      }
+    });
+    // Make links open in new tab
+    if (el.tagName === 'A') {
+      el.setAttribute('target', '_blank');
+      el.setAttribute('rel', 'noopener noreferrer');
+    }
+    // Mark external images with data attribute for later processing
+    // (CSP blocks direct loading, so we'll convert to blob URLs)
+    if (el.tagName === 'IMG') {
+      const src = el.getAttribute('src');
+      if (src && (src.startsWith('http://') || src.startsWith('https://'))) {
+        el.setAttribute('data-external-src', src);
+        el.setAttribute('src', ''); // Clear src to prevent CSP error
+        el.setAttribute('alt', el.getAttribute('alt') || 'Loading image...');
+      }
+    }
+  });
+
+  return temp.innerHTML || '<p>No content available.</p>';
+}
+
+const ArticleView: React.FC<{
+  article: RssArticle;
+  feedTitle: string;
+  app: App | null;
+  onBack: (app: App) => void;
+  onToggleSaved: () => void;
+  onMarkRead: (isRead: boolean) => void;
+}> = ({ article, feedTitle, app, onBack, onToggleSaved, onMarkRead }) => {
+  const [fullContent, setFullContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Process external images after content renders - use MCP tool to bypass CSP
+  useEffect(() => {
+    if (loading || !contentRef.current || !app) return;
+
+    const processImages = async () => {
+      const images = contentRef.current?.querySelectorAll('img[data-external-src]');
+      if (!images || images.length === 0) return;
+
+      for (const img of images) {
+        const externalSrc = img.getAttribute('data-external-src');
+        if (!externalSrc) continue;
+
+        try {
+          // Use MCP tool to proxy the image (bypasses CSP)
+          const result = await app.callServerTool({
+            name: 'proxy_image',
+            arguments: { url: externalSrc },
+          });
+
+          const data = extractStructuredContent<{ dataUrl?: string; error?: string }>(result);
+
+          if (data?.dataUrl) {
+            img.setAttribute('src', data.dataUrl);
+            img.removeAttribute('data-external-src');
+          } else {
+            // Show placeholder for failed images
+            img.setAttribute('alt', '[Image failed to load]');
+          }
+        } catch (err) {
+          console.warn('[LibraLM-RSS] Failed to load image:', externalSrc, err);
+          img.setAttribute('alt', '[Image failed to load]');
+        }
+      }
+    };
+
+    processImages();
+  }, [loading, fullContent, app]);
+
+  // Fetch full article content and sync context when viewed
+  useEffect(() => {
+    if (!app || !article) return;
+
+    let cancelled = false;
+
+    const loadArticle = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Fetch full article content from server
+        const result = await app.callServerTool({
+          name: 'get_article_content',
+          arguments: { articleId: article.id },
+        });
+
+        if (cancelled) return;
+
+        const data = extractStructuredContent<{
+          content?: string;
+          summary?: string;
+        }>(result);
+
+        const content = data?.content || data?.summary || article.content || article.summary || '';
+        setFullContent(content);
+
+        // Mark as read
+        if (!article.isRead) {
+          onMarkRead(true);
+        }
+
+        // Sync context to server
+        app.callServerTool({
+          name: 'sync_rss_context',
+          arguments: {
+            articleId: article.id,
+            feedTitle,
+            articleTitle: article.title,
+            author: article.author,
+            pubDate: article.pubDate,
+            content: content,
+          },
+        }).catch((err) => {
+          console.warn('[LibraLM-RSS] Failed to sync context:', err);
+        });
+
+        // Update model context
+        app.updateModelContext({
+          content: [{
+            type: 'text',
+            text: `--- RSS MODE ---
+LibraLM RSS Reader | Reading: "${article.title}" from ${feedTitle}
+${article.author ? `By ${article.author}` : ''}${article.pubDate ? ` | ${new Date(article.pubDate).toLocaleDateString()}` : ''}
+Article ID: ${article.id}
+
+IMPORTANT: User is reading an RSS ARTICLE, not a book.
+- To get article content: use get_rss_context with articleId="${article.id}"
+- get_current_context is for BOOKS only and will say "no book is being read"`,
+          }],
+        }).catch((err) => {
+          console.warn('[LibraLM-RSS] Failed to update model context:', err);
+        });
+      } catch (err) {
+        if (cancelled) return;
+        console.error('[LibraLM-RSS] Failed to load article:', err);
+        // Fall back to article content from state
+        setFullContent(article.content || article.summary || '');
+        setError('Failed to load full article. Showing cached version.');
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadArticle();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [app, article.id]); // Only re-run when article.id changes
+
+  return (
+    <div className="article-view">
+      <header className="article-header">
+        <div className="article-header-left">
+          <button className="reader-back-btn" onClick={() => app && onBack(app)}>
+            <ChevronLeft />
+            <span>Feeds</span>
+          </button>
+        </div>
+        <div className="article-header-right">
+          <button
+            className={`reader-header-btn ${article.isSaved ? 'is-saved' : ''}`}
+            onClick={onToggleSaved}
+            title={article.isSaved ? 'Unsave' : 'Save'}
+          >
+            <Star fill={article.isSaved ? 'currentColor' : 'none'} />
+          </button>
+          {article.link && (
+            <a
+              href={article.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="reader-header-btn"
+              title="Open original"
+            >
+              <ExternalLink />
+            </a>
+          )}
+        </div>
+      </header>
+
+      <div className="article-content">
+        <div className="article-content-header">
+          <h1 className="article-title">{article.title}</h1>
+          <div className="article-meta">
+            <span className="article-feed-name">{feedTitle}</span>
+            {article.author && <span className="article-author-name">{article.author}</span>}
+            {article.pubDate && (
+              <span className="article-pub-date">
+                {new Date(article.pubDate).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="article-error-notice">{error}</div>
+        )}
+
+        {loading ? (
+          <div className="article-loading">
+            <div className="loading-spinner" />
+            <div className="loading-text">Loading article...</div>
+          </div>
+        ) : (
+          <div
+            ref={contentRef}
+            className="article-body"
+            dangerouslySetInnerHTML={{
+              __html: sanitizeHtml(fullContent || ''),
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 };
@@ -1659,6 +2256,12 @@ function LibraLMReaderApp() {
     filter: 'all',
     showNotes: false,
     notesTab: 'highlights',
+    // RSS state
+    feeds: [],
+    currentFeed: null,
+    articles: [],
+    currentArticle: null,
+    rssFilter: 'all',
   });
 
   const [hostContext, setHostContext] = useState<McpUiHostContext | undefined>();
@@ -1714,6 +2317,236 @@ function LibraLMReaderApp() {
 
   const handleOpenNotes = useCallback(() => {
     setState(prev => ({ ...prev, showNotes: true }));
+  }, []);
+
+  // RSS Handlers
+  const handleOpenFeeds = useCallback(async (app: App) => {
+    setState(prev => ({ ...prev, view: 'loading' }));
+
+    try {
+      // Load feeds
+      const feedsResult = await app.callServerTool({
+        name: 'list_feeds',
+        arguments: {},
+      });
+
+      const feedsData = extractStructuredContent<{ feeds: RssFeed[]; totalUnread: number }>(feedsResult);
+
+      // Load all articles
+      const articlesResult = await app.callServerTool({
+        name: 'get_feed_articles',
+        arguments: { limit: 100 },
+      });
+
+      const articlesData = extractStructuredContent<{ articles: RssArticle[] }>(articlesResult);
+
+      const feeds = feedsData?.feeds || [];
+      const articles = articlesData?.articles || [];
+      const totalUnread = feedsData?.totalUnread || 0;
+      const savedCount = articles.filter(a => a.isSaved).length;
+
+      setState(prev => ({
+        ...prev,
+        view: 'feeds',
+        feeds,
+        articles,
+        currentFeed: null,
+        currentArticle: null,
+      }));
+
+      // Inform Claude about the RSS state
+      app.updateModelContext({
+        content: [{
+          type: 'text',
+          text: `--- RSS MODE ---
+LibraLM RSS Reader | ${feeds.length} feeds, ${totalUnread} unread, ${savedCount} saved
+
+User is browsing RSS feeds (not reading books).
+- To list feeds: use list_subscriptions
+- When user opens an article and asks about it: use get_rss_context (NOT get_current_context)
+- To search articles: use search_rss_articles`,
+        }],
+      }).catch(console.warn);
+    } catch (err) {
+      console.error('[LibraLM-RSS] Failed to load feeds:', err);
+      setState(prev => ({ ...prev, view: 'library' }));
+    }
+  }, []);
+
+  const handleSelectFeed = useCallback(async (feed: RssFeed | null, app: App) => {
+    setState(prev => ({ ...prev, currentFeed: feed }));
+
+    // Load articles for this feed
+    try {
+      const result = await app.callServerTool({
+        name: 'get_feed_articles',
+        arguments: feed ? { feedId: feed.id, limit: 100 } : { limit: 100 },
+      });
+
+      const data = extractStructuredContent<{ articles: RssArticle[] }>(result);
+      setState(prev => ({
+        ...prev,
+        articles: data?.articles || [],
+      }));
+    } catch (err) {
+      console.error('[LibraLM-RSS] Failed to load articles:', err);
+    }
+  }, []);
+
+  const handleOpenArticle = useCallback((article: RssArticle) => {
+    setState(prev => ({
+      ...prev,
+      view: 'article',
+      currentArticle: article,
+    }));
+  }, []);
+
+  const handleBackToFeeds = useCallback((app: App) => {
+    setState(prev => {
+      const totalUnread = prev.feeds.reduce((sum, f) => sum + f.unreadCount, 0);
+      const savedCount = prev.articles.filter(a => a.isSaved).length;
+
+      // Update model context when going back to feed list
+      app.updateModelContext({
+        content: [{
+          type: 'text',
+          text: `--- RSS MODE ---
+LibraLM RSS Reader | ${prev.feeds.length} feeds, ${totalUnread} unread, ${savedCount} saved
+
+User is browsing RSS feeds (not reading books).
+- To list feeds: use list_subscriptions
+- When user opens an article and asks about it: use get_rss_context (NOT get_current_context)
+- To search articles: use search_rss_articles`,
+        }],
+      }).catch(console.warn);
+
+      return {
+        ...prev,
+        view: 'feeds',
+        currentArticle: null,
+      };
+    });
+  }, []);
+
+  const handleSubscribeFeed = useCallback(async (url: string, app: App) => {
+    try {
+      const result = await app.callServerTool({
+        name: 'subscribe_feed',
+        arguments: { url },
+      });
+
+      const data = extractStructuredContent<{ feed: RssFeed; articleCount: number }>(result);
+
+      if (data?.feed) {
+        // Reload feeds and articles
+        handleOpenFeeds(app);
+      }
+    } catch (err) {
+      console.error('[LibraLM-RSS] Failed to subscribe:', err);
+    }
+  }, [handleOpenFeeds]);
+
+  const handleUnsubscribeFeed = useCallback(async (feedId: string, app: App) => {
+    try {
+      await app.callServerTool({
+        name: 'unsubscribe_feed',
+        arguments: { feedId },
+      });
+
+      setState(prev => ({
+        ...prev,
+        feeds: prev.feeds.filter(f => f.id !== feedId),
+        articles: prev.articles.filter(a => a.feedId !== feedId),
+        currentFeed: prev.currentFeed?.id === feedId ? null : prev.currentFeed,
+      }));
+    } catch (err) {
+      console.error('[LibraLM-RSS] Failed to unsubscribe:', err);
+    }
+  }, []);
+
+  const handleRefreshFeed = useCallback(async (feedId: string, app: App) => {
+    try {
+      await app.callServerTool({
+        name: 'refresh_feed',
+        arguments: { feedId },
+      });
+
+      // Reload feeds and articles
+      handleOpenFeeds(app);
+    } catch (err) {
+      console.error('[LibraLM-RSS] Failed to refresh feed:', err);
+    }
+  }, [handleOpenFeeds]);
+
+  const handleRefreshAllFeeds = useCallback(async (app: App) => {
+    try {
+      await app.callServerTool({
+        name: 'refresh_all_feeds',
+        arguments: {},
+      });
+
+      // Reload feeds and articles
+      handleOpenFeeds(app);
+    } catch (err) {
+      console.error('[LibraLM-RSS] Failed to refresh feeds:', err);
+    }
+  }, [handleOpenFeeds]);
+
+  const handleToggleArticleSaved = useCallback(async (articleId: string, app: App) => {
+    try {
+      const result = await app.callServerTool({
+        name: 'save_article',
+        arguments: { articleId },
+      });
+
+      const data = extractStructuredContent<{ articleId: string; isSaved: boolean }>(result);
+
+      setState(prev => ({
+        ...prev,
+        articles: prev.articles.map(a =>
+          a.id === articleId ? { ...a, isSaved: data?.isSaved ?? !a.isSaved } : a
+        ),
+        currentArticle: prev.currentArticle?.id === articleId
+          ? { ...prev.currentArticle, isSaved: data?.isSaved ?? !prev.currentArticle.isSaved }
+          : prev.currentArticle,
+      }));
+    } catch (err) {
+      console.error('[LibraLM-RSS] Failed to toggle saved:', err);
+    }
+  }, []);
+
+  const handleMarkArticleRead = useCallback(async (articleId: string, isRead: boolean, app: App) => {
+    try {
+      await app.callServerTool({
+        name: 'mark_article_read',
+        arguments: { articleId, isRead },
+      });
+
+      setState(prev => ({
+        ...prev,
+        articles: prev.articles.map(a =>
+          a.id === articleId ? { ...a, isRead } : a
+        ),
+        currentArticle: prev.currentArticle?.id === articleId
+          ? { ...prev.currentArticle, isRead }
+          : prev.currentArticle,
+        // Update unread count in feeds
+        feeds: prev.feeds.map(f => {
+          const article = prev.articles.find(a => a.id === articleId);
+          if (article && article.feedId === f.id) {
+            return {
+              ...f,
+              unreadCount: isRead
+                ? Math.max(0, f.unreadCount - 1)
+                : f.unreadCount + 1,
+            };
+          }
+          return f;
+        }),
+      }));
+    } catch (err) {
+      console.error('[LibraLM-RSS] Failed to mark read:', err);
+    }
   }, []);
 
   // Initialize MCP App with useApp hook
@@ -2358,6 +3191,53 @@ function LibraLMReaderApp() {
               onToggleFavorite={handleToggleFavorite}
               sidebarCollapsed={sidebarCollapsed}
               onToggleSidebar={handleToggleSidebar}
+              onOpenFeeds={() => handleOpenFeeds(app)}
+              feedsUnreadCount={state.feeds.reduce((sum, f) => sum + f.unreadCount, 0)}
+            />
+          </motion.div>
+        )}
+
+        {state.view === 'feeds' && (
+          <motion.div
+            key="feeds"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ height: '100%', width: '100%' }}
+          >
+            <FeedsView
+              state={state}
+              app={app}
+              onSelectFeed={(feed) => handleSelectFeed(feed, app)}
+              onOpenArticle={handleOpenArticle}
+              onRefreshFeed={(feedId) => handleRefreshFeed(feedId, app)}
+              onRefreshAll={() => handleRefreshAllFeeds(app)}
+              onUnsubscribe={(feedId) => handleUnsubscribeFeed(feedId, app)}
+              onSubscribe={(url) => handleSubscribeFeed(url, app)}
+              onToggleSaved={(articleId) => handleToggleArticleSaved(articleId, app)}
+              onFilterChange={(filter) => setState(prev => ({ ...prev, rssFilter: filter }))}
+              onBackToLibrary={() => setState(prev => ({ ...prev, view: 'library' }))}
+            />
+          </motion.div>
+        )}
+
+        {state.view === 'article' && state.currentArticle && (
+          <motion.div
+            key="article"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ height: '100%', width: '100%' }}
+          >
+            <ArticleView
+              article={state.currentArticle}
+              feedTitle={state.feeds.find(f => f.id === state.currentArticle?.feedId)?.title || ''}
+              app={app}
+              onBack={handleBackToFeeds}
+              onToggleSaved={() => handleToggleArticleSaved(state.currentArticle!.id, app)}
+              onMarkRead={(isRead) => handleMarkArticleRead(state.currentArticle!.id, isRead, app)}
             />
           </motion.div>
         )}

@@ -117,6 +117,35 @@ export interface SemanticIndex {
 }
 
 // ============================================================================
+// RSS Types
+// ============================================================================
+
+export interface RssFeed {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  iconUrl?: string;
+  lastFetched?: string;
+  createdAt: string;
+}
+
+export interface RssArticle {
+  id: string;
+  feedId: string;
+  guid: string;
+  title: string;
+  link?: string;
+  author?: string;
+  pubDate?: string;
+  summary?: string;
+  content?: string;
+  isRead: boolean;
+  isSaved: boolean;
+  fetchedAt: string;
+}
+
+// ============================================================================
 // Storage Class
 // ============================================================================
 
@@ -216,6 +245,60 @@ export class Storage {
       );
 
       CREATE INDEX IF NOT EXISTS idx_semantic_index_book ON semantic_index(book_id);
+
+      -- RSS Feeds table
+      CREATE TABLE IF NOT EXISTS rss_feeds (
+        id TEXT PRIMARY KEY,
+        url TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        description TEXT,
+        icon_url TEXT,
+        last_fetched TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      -- RSS Articles table
+      CREATE TABLE IF NOT EXISTS rss_articles (
+        id TEXT PRIMARY KEY,
+        feed_id TEXT NOT NULL,
+        guid TEXT NOT NULL,
+        title TEXT NOT NULL,
+        link TEXT,
+        author TEXT,
+        pub_date TEXT,
+        summary TEXT,
+        content TEXT,
+        is_read INTEGER DEFAULT 0,
+        is_saved INTEGER DEFAULT 0,
+        fetched_at TEXT NOT NULL,
+        UNIQUE(feed_id, guid),
+        FOREIGN KEY (feed_id) REFERENCES rss_feeds(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rss_articles_feed ON rss_articles(feed_id);
+      CREATE INDEX IF NOT EXISTS idx_rss_articles_read ON rss_articles(is_read);
+      CREATE INDEX IF NOT EXISTS idx_rss_articles_saved ON rss_articles(is_saved);
+      CREATE INDEX IF NOT EXISTS idx_rss_articles_pubdate ON rss_articles(pub_date DESC);
+
+      -- FTS for RSS article search
+      CREATE VIRTUAL TABLE IF NOT EXISTS rss_articles_fts USING fts5(
+        title, summary, content,
+        article_id UNINDEXED,
+        feed_id UNINDEXED,
+        tokenize='porter unicode61'
+      );
+
+      -- RSS Reading Context (for Claude integration)
+      CREATE TABLE IF NOT EXISTS rss_reading_context (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        article_id TEXT NOT NULL,
+        feed_title TEXT NOT NULL,
+        article_title TEXT NOT NULL,
+        author TEXT,
+        pub_date TEXT,
+        content TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
 
     // Migration: Add book_title and author columns if they don't exist
@@ -838,6 +921,353 @@ export class Storage {
       FROM semantic_index
       ORDER BY updated_at DESC
     `).all() as Array<{ bookId: string; createdAt: string; updatedAt: string }>;
+  }
+
+  // ==========================================================================
+  // RSS Feed Methods
+  // ==========================================================================
+
+  addFeed(feed: Omit<RssFeed, 'id' | 'createdAt'>): RssFeed {
+    const id = this.generateId();
+    const createdAt = new Date().toISOString();
+
+    this.db!.prepare(`
+      INSERT INTO rss_feeds (id, url, title, description, icon_url, last_fetched, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, feed.url, feed.title, feed.description || null, feed.iconUrl || null, feed.lastFetched || null, createdAt);
+
+    return { ...feed, id, createdAt };
+  }
+
+  getFeed(feedId: string): RssFeed | null {
+    const row = this.db!.prepare(`
+      SELECT id, url, title, description, icon_url as iconUrl, last_fetched as lastFetched, created_at as createdAt
+      FROM rss_feeds
+      WHERE id = ?
+    `).get(feedId) as RssFeed | undefined;
+    return row || null;
+  }
+
+  getFeedByUrl(url: string): RssFeed | null {
+    const row = this.db!.prepare(`
+      SELECT id, url, title, description, icon_url as iconUrl, last_fetched as lastFetched, created_at as createdAt
+      FROM rss_feeds
+      WHERE url = ?
+    `).get(url) as RssFeed | undefined;
+    return row || null;
+  }
+
+  getFeeds(): RssFeed[] {
+    return this.db!.prepare(`
+      SELECT id, url, title, description, icon_url as iconUrl, last_fetched as lastFetched, created_at as createdAt
+      FROM rss_feeds
+      ORDER BY title ASC
+    `).all() as RssFeed[];
+  }
+
+  updateFeed(feedId: string, updates: Partial<Pick<RssFeed, 'title' | 'description' | 'iconUrl' | 'lastFetched'>>): void {
+    const setClauses: string[] = [];
+    const values: (string | null)[] = [];
+
+    if (updates.title !== undefined) {
+      setClauses.push('title = ?');
+      values.push(updates.title);
+    }
+    if (updates.description !== undefined) {
+      setClauses.push('description = ?');
+      values.push(updates.description || null);
+    }
+    if (updates.iconUrl !== undefined) {
+      setClauses.push('icon_url = ?');
+      values.push(updates.iconUrl || null);
+    }
+    if (updates.lastFetched !== undefined) {
+      setClauses.push('last_fetched = ?');
+      values.push(updates.lastFetched || null);
+    }
+
+    if (setClauses.length > 0) {
+      values.push(feedId);
+      this.db!.prepare(`UPDATE rss_feeds SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
+    }
+  }
+
+  deleteFeed(feedId: string): void {
+    // Delete articles first (FTS cleanup)
+    const articles = this.db!.prepare(`SELECT id FROM rss_articles WHERE feed_id = ?`).all(feedId) as Array<{ id: string }>;
+    const deleteFts = this.db!.prepare(`DELETE FROM rss_articles_fts WHERE article_id = ?`);
+    for (const { id } of articles) {
+      deleteFts.run(id);
+    }
+
+    // Delete articles, then feed
+    this.db!.prepare(`DELETE FROM rss_articles WHERE feed_id = ?`).run(feedId);
+    this.db!.prepare(`DELETE FROM rss_feeds WHERE id = ?`).run(feedId);
+  }
+
+  // ==========================================================================
+  // RSS Article Methods
+  // ==========================================================================
+
+  addArticle(article: Omit<RssArticle, 'id' | 'fetchedAt' | 'isRead' | 'isSaved'>): RssArticle | null {
+    const id = this.generateId();
+    const fetchedAt = new Date().toISOString();
+
+    try {
+      this.db!.prepare(`
+        INSERT INTO rss_articles (id, feed_id, guid, title, link, author, pub_date, summary, content, is_read, is_saved, fetched_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+      `).run(
+        id, article.feedId, article.guid, article.title,
+        article.link || null, article.author || null, article.pubDate || null,
+        article.summary || null, article.content || null, fetchedAt
+      );
+
+      // Add to FTS
+      this.db!.prepare(`
+        INSERT INTO rss_articles_fts (title, summary, content, article_id, feed_id)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(article.title, article.summary || '', article.content || '', id, article.feedId);
+
+      return { ...article, id, fetchedAt, isRead: false, isSaved: false };
+    } catch (err) {
+      // Duplicate guid - article already exists
+      if (String(err).includes('UNIQUE constraint failed')) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  addArticles(articles: Array<Omit<RssArticle, 'id' | 'fetchedAt' | 'isRead' | 'isSaved'>>): number {
+    let added = 0;
+    const transaction = this.db!.transaction(() => {
+      for (const article of articles) {
+        const result = this.addArticle(article);
+        if (result) added++;
+      }
+    });
+    transaction();
+    return added;
+  }
+
+  getArticle(articleId: string): RssArticle | null {
+    const row = this.db!.prepare(`
+      SELECT id, feed_id as feedId, guid, title, link, author, pub_date as pubDate,
+             summary, content, is_read as isRead, is_saved as isSaved, fetched_at as fetchedAt
+      FROM rss_articles
+      WHERE id = ?
+    `).get(articleId) as (Omit<RssArticle, 'isRead' | 'isSaved'> & { isRead: number; isSaved: number }) | undefined;
+
+    if (!row) return null;
+    return { ...row, isRead: Boolean(row.isRead), isSaved: Boolean(row.isSaved) };
+  }
+
+  getArticles(params: {
+    feedId?: string;
+    unreadOnly?: boolean;
+    savedOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }): RssArticle[] {
+    let sql = `
+      SELECT id, feed_id as feedId, guid, title, link, author, pub_date as pubDate,
+             summary, content, is_read as isRead, is_saved as isSaved, fetched_at as fetchedAt
+      FROM rss_articles
+      WHERE 1=1
+    `;
+    const sqlParams: (string | number)[] = [];
+
+    if (params.feedId) {
+      sql += ' AND feed_id = ?';
+      sqlParams.push(params.feedId);
+    }
+    if (params.unreadOnly) {
+      sql += ' AND is_read = 0';
+    }
+    if (params.savedOnly) {
+      sql += ' AND is_saved = 1';
+    }
+
+    sql += ' ORDER BY pub_date DESC, fetched_at DESC';
+
+    if (params.limit) {
+      sql += ' LIMIT ?';
+      sqlParams.push(params.limit);
+    }
+    if (params.offset) {
+      sql += ' OFFSET ?';
+      sqlParams.push(params.offset);
+    }
+
+    const rows = this.db!.prepare(sql).all(...sqlParams) as Array<
+      Omit<RssArticle, 'isRead' | 'isSaved'> & { isRead: number; isSaved: number }
+    >;
+
+    return rows.map((row) => ({
+      ...row,
+      isRead: Boolean(row.isRead),
+      isSaved: Boolean(row.isSaved),
+    }));
+  }
+
+  markArticleRead(articleId: string, isRead: boolean): void {
+    this.db!.prepare(`UPDATE rss_articles SET is_read = ? WHERE id = ?`).run(isRead ? 1 : 0, articleId);
+  }
+
+  markAllArticlesRead(feedId: string): void {
+    this.db!.prepare(`UPDATE rss_articles SET is_read = 1 WHERE feed_id = ?`).run(feedId);
+  }
+
+  toggleArticleSaved(articleId: string): boolean {
+    const article = this.getArticle(articleId);
+    if (!article) return false;
+
+    const newSaved = !article.isSaved;
+    this.db!.prepare(`UPDATE rss_articles SET is_saved = ? WHERE id = ?`).run(newSaved ? 1 : 0, articleId);
+    return newSaved;
+  }
+
+  getUnreadCount(feedId?: string): number {
+    if (feedId) {
+      const row = this.db!.prepare(`SELECT COUNT(*) as count FROM rss_articles WHERE feed_id = ? AND is_read = 0`).get(feedId) as { count: number };
+      return row.count;
+    }
+    const row = this.db!.prepare(`SELECT COUNT(*) as count FROM rss_articles WHERE is_read = 0`).get() as { count: number };
+    return row.count;
+  }
+
+  getFeedsWithUnreadCounts(): Array<RssFeed & { unreadCount: number }> {
+    const rows = this.db!.prepare(`
+      SELECT f.id, f.url, f.title, f.description, f.icon_url as iconUrl,
+             f.last_fetched as lastFetched, f.created_at as createdAt,
+             COUNT(CASE WHEN a.is_read = 0 THEN 1 END) as unreadCount
+      FROM rss_feeds f
+      LEFT JOIN rss_articles a ON f.id = a.feed_id
+      GROUP BY f.id
+      ORDER BY f.title ASC
+    `).all() as Array<RssFeed & { unreadCount: number }>;
+    return rows;
+  }
+
+  searchRssArticles(params: {
+    query: string;
+    feedId?: string;
+    limit?: number;
+  }): Array<RssArticle & { score: number }> {
+    const limit = params.limit || 50;
+
+    // Build FTS5 query
+    const terms = params.query
+      .split(/\s+/)
+      .filter((t) => t.length > 0)
+      .map((t) => `"${t.replace(/"/g, '""')}"*`)
+      .join(' AND ');
+
+    if (!terms) return [];
+
+    let sql = `
+      SELECT
+        a.id, a.feed_id as feedId, a.guid, a.title, a.link, a.author,
+        a.pub_date as pubDate, a.summary, a.content,
+        a.is_read as isRead, a.is_saved as isSaved, a.fetched_at as fetchedAt,
+        bm25(rss_articles_fts, 10.0, 1.0, 0.5) as bm25_score
+      FROM rss_articles_fts fts
+      JOIN rss_articles a ON fts.article_id = a.id
+      WHERE rss_articles_fts MATCH ?
+    `;
+    const sqlParams: (string | number)[] = [terms];
+
+    if (params.feedId) {
+      sql += ' AND a.feed_id = ?';
+      sqlParams.push(params.feedId);
+    }
+
+    sql += ' ORDER BY bm25_score LIMIT ?';
+    sqlParams.push(limit);
+
+    const rows = this.db!.prepare(sql).all(...sqlParams) as Array<
+      Omit<RssArticle, 'isRead' | 'isSaved'> & { isRead: number; isSaved: number; bm25_score: number }
+    >;
+
+    // Normalize scores
+    const absScores = rows.map((r) => Math.abs(r.bm25_score));
+    const maxAbsScore = Math.max(...absScores, 1);
+
+    return rows.map((row) => ({
+      ...row,
+      isRead: Boolean(row.isRead),
+      isSaved: Boolean(row.isSaved),
+      score: Math.abs(row.bm25_score) / maxAbsScore,
+    }));
+  }
+
+  deleteArticle(articleId: string): void {
+    this.db!.prepare(`DELETE FROM rss_articles_fts WHERE article_id = ?`).run(articleId);
+    this.db!.prepare(`DELETE FROM rss_articles WHERE id = ?`).run(articleId);
+  }
+
+  // ==========================================================================
+  // RSS Reading Context (for Claude integration)
+  // ==========================================================================
+
+  saveRssReadingContext(context: {
+    articleId: string;
+    feedTitle: string;
+    articleTitle: string;
+    author?: string;
+    pubDate?: string;
+    content: string;
+  }): void {
+    this.db!.prepare(`
+      INSERT OR REPLACE INTO rss_reading_context (id, article_id, feed_title, article_title, author, pub_date, content, updated_at)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      context.articleId,
+      context.feedTitle,
+      context.articleTitle,
+      context.author || null,
+      context.pubDate || null,
+      context.content,
+      new Date().toISOString()
+    );
+  }
+
+  getRssReadingContext(): {
+    articleId: string;
+    feedTitle: string;
+    articleTitle: string;
+    author?: string;
+    pubDate?: string;
+    content: string;
+  } | null {
+    const row = this.db!.prepare(`
+      SELECT article_id as articleId, feed_title as feedTitle, article_title as articleTitle,
+             author, pub_date as pubDate, content
+      FROM rss_reading_context
+      WHERE id = 1
+    `).get() as {
+      articleId: string;
+      feedTitle: string;
+      articleTitle: string;
+      author: string | null;
+      pubDate: string | null;
+      content: string;
+    } | undefined;
+
+    if (!row) return null;
+    return {
+      articleId: row.articleId,
+      feedTitle: row.feedTitle,
+      articleTitle: row.articleTitle,
+      author: row.author || undefined,
+      pubDate: row.pubDate || undefined,
+      content: row.content,
+    };
+  }
+
+  clearRssReadingContext(): void {
+    this.db!.prepare(`DELETE FROM rss_reading_context WHERE id = 1`).run();
   }
 
   // ==========================================================================

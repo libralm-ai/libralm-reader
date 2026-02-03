@@ -4,6 +4,14 @@ import { z } from 'zod';
 import { viewLibrary, loadBookTool, savePosition, getBookCover, syncReadingContext, getCurrentContext } from './server/tools/book-management.js';
 import { addHighlight, addNote, listAnnotations, deleteAnnotation, searchHighlights, searchNotes, addBookmark, listBookmarks, deleteBookmark, exportAnnotations, SearchHighlightsSchema, SearchNotesSchema } from './server/tools/annotations.js';
 import { getBookToc, readChapter, getBookIndex, saveBookIndex, readPdfPage, getPdfToc, GetBookTocSchema, ReadChapterSchema, GetBookIndexSchema, SaveBookIndexSchema, ReadPdfPageSchema, GetPdfTocSchema } from './server/tools/indexing.js';
+import {
+  subscribeFeedTool, unsubscribeFeedTool, refreshFeedTool, refreshAllFeedsTool,
+  listFeedsTool, getFeedArticlesTool, getArticleContentTool, markArticleReadTool,
+  markAllReadTool, saveArticleTool, syncRssContextTool, getRssContextTool,
+  searchRssArticlesTool, getSavedArticlesTool, listSubscriptionsTool,
+  proxyImageTool,
+  SearchRssArticlesSchema
+} from './server/tools/rss-management.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -124,18 +132,21 @@ IMPORTANT: When the user asks about what they're currently reading, what's on th
     }
   );
 
-  // Model-only tool for getting current reading context
+  // Model-only tool for getting current BOOK reading context
   server.registerTool('get_current_context', {
-    description: `Returns what the user is currently reading in LibraLM Reader, including:
+    description: `Returns what the user is currently reading in the BOOK reader (EPUB/PDF only).
+
+IMPORTANT: This tool is for BOOKS only, not RSS articles!
+If the model context shows "--- RSS MODE ---", use get_rss_context instead.
+
+Returns:
 - Book title and author
 - Current position (page number and percentage)
 - The visible text content on the current page
 
-Use this tool when the user asks:
-- "What am I reading?"
-- "What's on this page?"
-- "Can you summarize what I'm looking at?"
-- Any question about their current book content`,
+Use when:
+- User is reading a BOOK (not RSS)
+- User asks about book content they're reading`,
     inputSchema: z.object({}),
   }, async () => {
     return getCurrentContext();
@@ -538,6 +549,284 @@ Returns:
       };
     }
   );
+
+  // ========================================================================
+  // RSS Feed Management Tools
+  // ========================================================================
+
+  // App-only: Subscribe to a new feed
+  registerAppTool(
+    server,
+    'subscribe_feed',
+    {
+      title: 'Subscribe to Feed',
+      description: 'Subscribe to a new RSS/Atom feed.',
+      inputSchema: {
+        url: z.string().url().describe('RSS/Atom feed URL to subscribe to'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { url: string }) => {
+      return subscribeFeedTool(args);
+    }
+  );
+
+  // App-only: Unsubscribe from a feed
+  registerAppTool(
+    server,
+    'unsubscribe_feed',
+    {
+      title: 'Unsubscribe from Feed',
+      description: 'Unsubscribe from an RSS feed.',
+      inputSchema: {
+        feedId: z.string().describe('Feed ID to unsubscribe from'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { feedId: string }) => {
+      return unsubscribeFeedTool(args);
+    }
+  );
+
+  // App-only: Refresh a single feed
+  registerAppTool(
+    server,
+    'refresh_feed',
+    {
+      title: 'Refresh Feed',
+      description: 'Refresh a single RSS feed to get new articles.',
+      inputSchema: {
+        feedId: z.string().describe('Feed ID to refresh'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { feedId: string }) => {
+      return refreshFeedTool(args);
+    }
+  );
+
+  // App-only: Refresh all feeds
+  registerAppTool(
+    server,
+    'refresh_all_feeds',
+    {
+      title: 'Refresh All Feeds',
+      description: 'Refresh all subscribed RSS feeds.',
+      inputSchema: {},
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async () => {
+      return refreshAllFeedsTool();
+    }
+  );
+
+  // App-only: List feeds
+  registerAppTool(
+    server,
+    'list_feeds',
+    {
+      title: 'List Feeds',
+      description: 'List all subscribed RSS feeds with unread counts.',
+      inputSchema: {},
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async () => {
+      return listFeedsTool();
+    }
+  );
+
+  // App-only: Get articles for a feed
+  registerAppTool(
+    server,
+    'get_feed_articles',
+    {
+      title: 'Get Feed Articles',
+      description: 'Get articles for a feed or all feeds.',
+      inputSchema: {
+        feedId: z.string().optional().describe('Feed ID (omit for all feeds)'),
+        unreadOnly: z.boolean().optional().describe('Only show unread articles'),
+        savedOnly: z.boolean().optional().describe('Only show saved articles'),
+        limit: z.number().optional().describe('Max articles to return (default 50)'),
+        offset: z.number().optional().describe('Offset for pagination'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { feedId?: string; unreadOnly?: boolean; savedOnly?: boolean; limit?: number; offset?: number }) => {
+      return getFeedArticlesTool(args);
+    }
+  );
+
+  // App-only: Get full article content
+  registerAppTool(
+    server,
+    'get_article_content',
+    {
+      title: 'Get Article Content',
+      description: 'Get the full content of an RSS article.',
+      inputSchema: {
+        articleId: z.string().describe('Article ID'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { articleId: string }) => {
+      return getArticleContentTool(args);
+    }
+  );
+
+  // App-only: Mark article read/unread
+  registerAppTool(
+    server,
+    'mark_article_read',
+    {
+      title: 'Mark Article Read',
+      description: 'Mark an RSS article as read or unread.',
+      inputSchema: {
+        articleId: z.string().describe('Article ID'),
+        isRead: z.boolean().describe('Mark as read (true) or unread (false)'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { articleId: string; isRead: boolean }) => {
+      return markArticleReadTool(args);
+    }
+  );
+
+  // App-only: Mark all articles in feed as read
+  registerAppTool(
+    server,
+    'mark_all_read',
+    {
+      title: 'Mark All Read',
+      description: 'Mark all articles in a feed as read.',
+      inputSchema: {
+        feedId: z.string().describe('Feed ID'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { feedId: string }) => {
+      return markAllReadTool(args);
+    }
+  );
+
+  // App-only: Toggle article saved state
+  registerAppTool(
+    server,
+    'save_article',
+    {
+      title: 'Save Article',
+      description: 'Toggle saved/starred state for an article.',
+      inputSchema: {
+        articleId: z.string().describe('Article ID'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { articleId: string }) => {
+      return saveArticleTool(args);
+    }
+  );
+
+  // App-only: Sync RSS reading context
+  registerAppTool(
+    server,
+    'sync_rss_context',
+    {
+      title: 'Sync RSS Context',
+      description: 'Sync the current RSS article context from the UI.',
+      inputSchema: {
+        articleId: z.string().describe('Article ID'),
+        feedTitle: z.string().describe('Feed title'),
+        articleTitle: z.string().describe('Article title'),
+        author: z.string().optional().describe('Article author'),
+        pubDate: z.string().optional().describe('Publication date'),
+        content: z.string().describe('Article content (visible text)'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { articleId: string; feedTitle: string; articleTitle: string; author?: string; pubDate?: string; content: string }) => {
+      return syncRssContextTool(args);
+    }
+  );
+
+  // App-only: Proxy external images (bypass CSP)
+  registerAppTool(
+    server,
+    'proxy_image',
+    {
+      title: 'Proxy Image',
+      description: 'Fetch an external image and return as base64 data URL (bypasses CSP).',
+      inputSchema: {
+        url: z.string().url().describe('External image URL to proxy'),
+      },
+      _meta: { ui: { resourceUri, visibility: ['app'] } },
+    },
+    async (args: { url: string }) => {
+      return proxyImageTool(args);
+    }
+  );
+
+  // Model-only: Get current RSS context
+  server.registerTool('get_rss_context', {
+    description: `Returns what the user is currently reading in the RSS READER (for RSS articles/feeds).
+
+CRITICAL: ALWAYS call this tool FIRST before answering any question about "this article", "what am I reading", or the current article content. The user may have switched to a different article since your last check. DO NOT assume based on previous conversation - always verify with this tool.
+
+IMPORTANT: Use this tool when the model context shows "--- RSS MODE ---".
+Do NOT use get_current_context for RSS - that tool is for BOOKS only.
+
+Parameters:
+- articleId (optional): The article ID from the model context. If provided, fetches directly from database.
+
+Returns:
+- Feed and article title
+- Author and publication date
+- The full article content
+
+ALWAYS use this tool to check before:
+- Answering "what is this article about?"
+- Summarizing the article
+- Discussing article content
+- ANY question that relates to the current article
+
+Example: If context shows 'Article ID: abc123', call get_rss_context with articleId="abc123"`,
+    inputSchema: z.object({
+      articleId: z.string().optional().describe('Article ID from the model context (e.g., "Article ID: xxx")'),
+    }),
+  }, async (args: { articleId?: string }) => {
+    return getRssContextTool(args.articleId);
+  });
+
+  // Model-only: Search RSS articles
+  server.registerTool('search_rss_articles', {
+    description: `Search through the user's RSS articles. Use this when the user asks to find articles or search their feeds.
+
+Parameters:
+- query: Search text
+- feedId (optional): Limit to specific feed
+- limit (optional): Max results (default 50)
+
+Example queries:
+- "Find articles about AI"
+- "Search for posts about programming"`,
+    inputSchema: SearchRssArticlesSchema,
+  }, async (args) => {
+    return searchRssArticlesTool(args);
+  });
+
+  // Model-only: Get saved articles
+  server.registerTool('get_saved_articles', {
+    description: `Get the user's saved/starred RSS articles. Use when the user asks about their saved or bookmarked articles.`,
+    inputSchema: z.object({}),
+  }, async () => {
+    return getSavedArticlesTool();
+  });
+
+  // Model-only: List RSS subscriptions
+  server.registerTool('list_subscriptions', {
+    description: `List all RSS feeds the user is subscribed to. Use when the user asks what feeds they follow or about their subscriptions.`,
+    inputSchema: z.object({}),
+  }, async () => {
+    return listSubscriptionsTool();
+  });
 
   // ========================================================================
   // UI Resource
