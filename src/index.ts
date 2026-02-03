@@ -132,21 +132,56 @@ IMPORTANT: When the user asks about what they're currently reading, what's on th
     }
   );
 
-  // Model-only tool for getting current BOOK reading context
+  // UNIFIED tool for getting current reading context (checks both book and RSS)
+  // This is the PREFERRED tool - Claude should use this instead of separate tools
+  server.registerTool('get_reading_context', {
+    description: `Returns what the user is currently reading - automatically detects if it's a BOOK or RSS article.
+
+IMPORTANT: Use this tool FIRST when the user asks "what am I reading?", "summarize this", or any question about current content. This tool automatically checks both book and RSS contexts.
+
+Returns whichever content the user is currently viewing:
+- If reading a BOOK: title, author, position, and visible text
+- If reading an RSS ARTICLE: feed, article title, author, date, and full content
+- If nothing is open: indicates user should open content first
+
+ALWAYS call this tool before answering questions about what the user is reading.`,
+    inputSchema: z.object({}),
+  }, async () => {
+    // First check RSS context (more specific - user had to navigate to RSS)
+    const rssResult = getRssContextTool();
+    const rssContent = rssResult.content[0];
+    if (rssContent && rssContent.type === 'text' && !rssContent.text.includes('No RSS article is currently being read')) {
+      return rssResult;
+    }
+
+    // Fall back to book context
+    const bookResult = await getCurrentContext();
+    const bookContent = bookResult.content[0];
+    if (bookContent && bookContent.type === 'text' && !bookContent.text.includes('No book is currently being read')) {
+      return bookResult;
+    }
+
+    // Nothing is being read
+    return {
+      content: [{
+        type: 'text' as const,
+        text: 'The user is not currently reading anything. They may be viewing the library or feed list. Ask them to open a book or article first.',
+      }],
+    };
+  });
+
+  // Model-only tool for getting current BOOK reading context (legacy - prefer get_reading_context)
   server.registerTool('get_current_context', {
     description: `Returns what the user is currently reading in the BOOK reader (EPUB/PDF only).
 
-IMPORTANT: This tool is for BOOKS only, not RSS articles!
-If the model context shows "--- RSS MODE ---", use get_rss_context instead.
+NOTE: Prefer using get_reading_context instead - it automatically detects book vs RSS.
+
+This tool is for BOOKS only, not RSS articles.
 
 Returns:
 - Book title and author
 - Current position (page number and percentage)
-- The visible text content on the current page
-
-Use when:
-- User is reading a BOOK (not RSS)
-- User asks about book content they're reading`,
+- The visible text content on the current page`,
     inputSchema: z.object({}),
   }, async () => {
     return getCurrentContext();
@@ -764,14 +799,11 @@ Returns:
     }
   );
 
-  // Model-only: Get current RSS context
+  // Model-only: Get current RSS context (legacy - prefer get_reading_context)
   server.registerTool('get_rss_context', {
     description: `Returns what the user is currently reading in the RSS READER (for RSS articles/feeds).
 
-CRITICAL: ALWAYS call this tool FIRST before answering any question about "this article", "what am I reading", or the current article content. The user may have switched to a different article since your last check. DO NOT assume based on previous conversation - always verify with this tool.
-
-IMPORTANT: Use this tool when the model context shows "--- RSS MODE ---".
-Do NOT use get_current_context for RSS - that tool is for BOOKS only.
+NOTE: Prefer using get_reading_context instead - it automatically detects book vs RSS.
 
 Parameters:
 - articleId (optional): The article ID from the model context. If provided, fetches directly from database.
@@ -779,15 +811,7 @@ Parameters:
 Returns:
 - Feed and article title
 - Author and publication date
-- The full article content
-
-ALWAYS use this tool to check before:
-- Answering "what is this article about?"
-- Summarizing the article
-- Discussing article content
-- ANY question that relates to the current article
-
-Example: If context shows 'Article ID: abc123', call get_rss_context with articleId="abc123"`,
+- The full article content`,
     inputSchema: z.object({
       articleId: z.string().optional().describe('Article ID from the model context (e.g., "Article ID: xxx")'),
     }),
